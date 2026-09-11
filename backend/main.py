@@ -1,37 +1,26 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.document import router as document_router
-from backend.database.database import Base, engine
-from backend.database import models
-
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(
-    title="Enterprise Multimodal AI Document Intelligence Platform",
-    description="AI-powered document processing and intelligence platform",
+    title="Enterprise Grade Multimodal AI Document Intelligence Platform",
+    description="Agentic AI powered enterprise document processing system",
     version="1.0.0"
 )
 
 
-app.include_router(
-    document_router
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-@app.get("/")
-def root():
-
-    return {
-        "message": "Enterprise Multimodal AI Document Intelligence Platform is running"
-    }
-
-
-@app.get("/about")
-def about():
-
-    return {
-        "project": "Enterprise Grade Multimodal AI Document Intelligence Platform using Agentic AI"
-    }
+app.include_router(document_router)
