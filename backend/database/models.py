@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
 from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Integer, String, Text
 
 from backend.database.database import Base
 
@@ -15,24 +16,36 @@ class Document(Base):
     )
 
     filename = Column(
-        String,
+        String(255),
         nullable=False
     )
 
     document_type = Column(
-        String,
-        nullable=False
+        String(100),
+        nullable=True
+    )
+
+    status = Column(
+        String(50),
+        default="uploaded"
     )
 
     extracted_text = Column(
-        Text
+        Text,
+        nullable=True
     )
 
-    extracted_information = Column(
-        Text
+    analysis = Column(
+        Text,
+        nullable=True
     )
 
-    uploaded_at = Column(
+    agent_trace = Column(
+        Text,
+        nullable=True
+    )
+
+    created_at = Column(
         DateTime,
         default=datetime.utcnow
     )

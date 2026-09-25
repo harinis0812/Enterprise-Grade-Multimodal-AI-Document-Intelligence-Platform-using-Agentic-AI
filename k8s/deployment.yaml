@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docuai-backend
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: docuai-backend
+
+  template:
+    metadata:
+      labels:
+        app: docuai-backend
+
+    spec:
+      containers:
+
+        - name: docuai-backend
+          image: docuai-backend:latest
+
+          ports:
+            - containerPort: 8000
+
+          env:
+            - name: DATABASE_URL
+              value: "sqlite:///./docuai.db"
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"

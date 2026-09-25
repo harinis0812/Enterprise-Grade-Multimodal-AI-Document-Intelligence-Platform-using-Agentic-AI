@@ -1,0 +1,32 @@
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: docuai-postgres
+
+    environment:
+      POSTGRES_DB: docuai
+      POSTGRES_USER: docuai
+      POSTGRES_PASSWORD: docuai_password
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    container_name: docuai-backend-compose
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      DATABASE_URL: postgresql://docuai:docuai_password@postgres:5432/docuai
+
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:

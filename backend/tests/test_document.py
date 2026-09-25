@@ -22,3 +22,13 @@ def test_document_not_found():
     response = client.get("/documents/999999")
 
     assert response.status_code == 404
+
+def test_health():
+    response = client.get("/health")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["status"] == "healthy"
+    assert data["service"] == "DocuAI"

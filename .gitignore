@@ -5,3 +5,6 @@ __pycache__/
 backend/uploads/*
 test.jpeg
 backend/database/*.db
+
+docuai.db
+mlruns/
