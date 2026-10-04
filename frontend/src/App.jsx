@@ -3,63 +3,158 @@ import "./App.css";
 
 const API_URL = "http://127.0.0.1:8000";
 
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+];
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
+
   const [uploadStatus, setUploadStatus] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
   const [documentResult, setDocumentResult] = useState(null);
   const [documents, setDocuments] = useState([]);
+
   const [selectedDocument, setSelectedDocument] = useState(null);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
+  const [isLoadingDocument, setIsLoadingDocument] = useState(false);
 
   useEffect(() => {
     loadDocuments();
   }, []);
 
+  /*
+   * Safely read JSON from the backend.
+   */
+  async function readResponse(response) {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      return await response.json();
+    }
+
+    const text = await response.text();
+
+    return {
+      detail: text || "The backend returned an unexpected response.",
+    };
+  }
+
+  /*
+   * Load previously processed documents.
+   */
   async function loadDocuments() {
     try {
       setIsLoadingDocuments(true);
+      setErrorMessage("");
 
       const response = await fetch(`${API_URL}/documents`);
 
+      const data = await readResponse(response);
+
       if (!response.ok) {
-        throw new Error("Unable to load document history");
+        throw new Error(
+          data.detail || "Unable to load document history."
+        );
       }
 
-      const data = await response.json();
-      setDocuments(data);
+      if (Array.isArray(data)) {
+        setDocuments(data);
+      } else if (Array.isArray(data.documents)) {
+        setDocuments(data.documents);
+      } else {
+        setDocuments([]);
+      }
     } catch (error) {
       console.error("History error:", error);
+
+      setDocuments([]);
+
+      setErrorMessage(
+        `Unable to connect to the backend. Make sure FastAPI is running at ${API_URL}.`
+      );
     } finally {
       setIsLoadingDocuments(false);
     }
   }
 
+  /*
+   * Validate the selected file.
+   */
+  function validateFile(file) {
+    if (!file) {
+      return "Please select a document first.";
+    }
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return "Unsupported file type. Please upload PDF, JPG, JPEG or PNG.";
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return "File is too large. Maximum allowed size is 20 MB.";
+    }
+
+    return "";
+  }
+
+  /*
+   * File selection.
+   */
   function handleFileChange(event) {
-    const file = event.target.files[0];
+    const file = event.target.files?.[0];
 
     if (!file) {
       return;
     }
 
+    const validationError = validateFile(file);
+
+    if (validationError) {
+      setSelectedFile(null);
+      setUploadStatus("");
+      setErrorMessage(validationError);
+      return;
+    }
+
     setSelectedFile(file);
     setUploadStatus("");
+    setErrorMessage("");
     setDocumentResult(null);
     setSelectedDocument(null);
   }
 
+  /*
+   * Upload and process the document.
+   */
   async function handleUpload() {
     if (!selectedFile) {
       setUploadStatus("Please select a document first.");
       return;
     }
 
+    const validationError = validateFile(selectedFile);
+
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
+
     try {
       setIsProcessing(true);
       setUploadStatus("Processing your document...");
+      setErrorMessage("");
       setDocumentResult(null);
+      setSelectedDocument(null);
 
       const formData = new FormData();
+
       formData.append("file", selectedFile);
 
       const response = await fetch(`${API_URL}/upload`, {
@@ -67,56 +162,167 @@ function App() {
         body: formData,
       });
 
-      const data = await response.json();
+      const data = await readResponse(response);
 
       if (!response.ok) {
-        throw new Error(data.detail || "Document upload failed");
+        throw new Error(
+          data.detail || "Document upload failed."
+        );
       }
 
+      /*
+       * Store the complete processing result.
+       */
       setDocumentResult(data);
-      setUploadStatus("Document processed successfully!");
+
+      setUploadStatus(
+        "Document processed successfully!"
+      );
+
       setSelectedFile(null);
 
+      /*
+       * Refresh document history.
+       */
       await loadDocuments();
     } catch (error) {
       console.error("Upload error:", error);
 
-      setUploadStatus(
-        error.message ||
-          "Error processing document. Please try again."
-      );
+      setUploadStatus("");
+
+      if (
+        error instanceof TypeError &&
+        error.message.toLowerCase().includes("fetch")
+      ) {
+        setErrorMessage(
+          `Cannot connect to the backend at ${API_URL}. Start the FastAPI server first.`
+        );
+      } else {
+        setErrorMessage(
+          error.message ||
+            "Error processing document. Please try again."
+        );
+      }
     } finally {
       setIsProcessing(false);
     }
   }
 
+  /*
+   * View a previously processed document.
+   */
   async function viewDocument(documentId) {
     try {
+      setIsLoadingDocument(true);
+      setErrorMessage("");
+      setSelectedDocument(null);
+
       const response = await fetch(
         `${API_URL}/documents/${documentId}`
       );
 
-      if (!response.ok) {
-        throw new Error("Unable to load document");
-      }
+      const data = await readResponse(response);
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Unable to load document."
+        );
+      }
 
       setSelectedDocument(data);
 
-      window.scrollTo({
-        top: document.body.scrollHeight,
-        behavior: "smooth",
-      });
+      setTimeout(() => {
+        window.scrollTo({
+          top: document.body.scrollHeight,
+          behavior: "smooth",
+        });
+      }, 100);
     } catch (error) {
       console.error("Document error:", error);
+
+      setErrorMessage(
+        error.message || "Unable to load document."
+      );
+    } finally {
+      setIsLoadingDocument(false);
     }
+  }
+
+  /*
+   * Convert object keys into readable labels.
+   */
+  function formatKey(key) {
+    return key
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (character) =>
+        character.toUpperCase()
+      );
+  }
+
+  /*
+   * Convert any value into something displayable.
+   */
+  function formatValue(value) {
+    if (value === null || value === undefined) {
+      return "N/A";
+    }
+
+    if (Array.isArray(value)) {
+      return value.join(", ");
+    }
+
+    if (typeof value === "object") {
+      return JSON.stringify(value, null, 2);
+    }
+
+    return String(value);
+  }
+
+  /*
+   * Render extracted information safely.
+   */
+  function renderInformation(information) {
+    if (
+      !information ||
+      typeof information !== "object" ||
+      Object.keys(information).length === 0
+    ) {
+      return (
+        <p>
+          No structured information was returned for this
+          document.
+        </p>
+      );
+    }
+
+    return (
+      <div className="information-grid">
+        {Object.entries(information).map(
+          ([key, value]) => (
+            <div
+              className="information-item"
+              key={key}
+            >
+              <span className="information-key">
+                {formatKey(key)}
+              </span>
+
+              <span className="information-value">
+                {formatValue(value)}
+              </span>
+            </div>
+          )
+        )}
+      </div>
+    );
   }
 
   return (
     <main className="docuai-app">
 
-      {/* HERO */}
+      {/* =====================================================
+          HERO
+      ====================================================== */}
 
       <section className="hero">
 
@@ -139,12 +345,14 @@ function App() {
           </h1>
 
           <p className="subtitle">
-            Enterprise Multimodal AI Document Intelligence Platform
+            Enterprise Multimodal AI Document Intelligence
+            Platform
           </p>
 
           <p className="description">
-            Upload documents, extract information, classify content,
-            and transform unstructured data into intelligent insights.
+            Upload documents, extract information, classify
+            content, and let autonomous AI agents transform
+            unstructured data into intelligent insights.
           </p>
 
         </div>
@@ -152,7 +360,24 @@ function App() {
       </section>
 
 
-      {/* UPLOAD */}
+      {/* =====================================================
+          ERROR MESSAGE
+      ====================================================== */}
+
+      {errorMessage && (
+        <section className="upload-section">
+
+          <div className="upload-status">
+            ⚠️ {errorMessage}
+          </div>
+
+        </section>
+      )}
+
+
+      {/* =====================================================
+          UPLOAD
+      ====================================================== */}
 
       <section className="upload-section">
 
@@ -166,7 +391,7 @@ function App() {
             <h2>Upload Document</h2>
 
             <p>
-              Start your AI-powered document analysis
+              Start your Agentic AI-powered document analysis
             </p>
           </div>
 
@@ -256,7 +481,9 @@ function App() {
       </section>
 
 
-      {/* CURRENT RESULT */}
+      {/* =====================================================
+          CURRENT RESULT
+      ====================================================== */}
 
       {documentResult && (
         <section className="result-section">
@@ -280,6 +507,8 @@ function App() {
 
           <div className="result-card">
 
+            {/* BASIC INFORMATION */}
+
             <div className="result-row">
 
               <span>
@@ -287,7 +516,7 @@ function App() {
               </span>
 
               <strong>
-                {documentResult.filename}
+                {documentResult.filename || "N/A"}
               </strong>
 
             </div>
@@ -300,11 +529,26 @@ function App() {
               </span>
 
               <strong>
-                {documentResult.document_type}
+                {documentResult.document_type || "Unknown"}
               </strong>
 
             </div>
 
+
+            <div className="result-row">
+
+              <span>
+                📌 Processing Status
+              </span>
+
+              <strong>
+                {documentResult.status || "Processed"}
+              </strong>
+
+            </div>
+
+
+            {/* EXTRACTED INFORMATION */}
 
             <div className="result-information">
 
@@ -312,34 +556,9 @@ function App() {
                 ✨ Extracted Information
               </h3>
 
-              <div className="information-grid">
-
-                {Object.entries(
-                  documentResult.document_information || {}
-                ).map(([key, value]) => (
-
-                  <div
-                    className="information-item"
-                    key={key}
-                  >
-
-                    <span className="information-key">
-                      {key.replaceAll("_", " ")}
-                    </span>
-
-                    <span className="information-value">
-
-                      {Array.isArray(value)
-                        ? value.join(", ")
-                        : String(value)}
-
-                    </span>
-
-                  </div>
-
-                ))}
-
-              </div>
+              {renderInformation(
+                documentResult.document_information
+              )}
 
             </div>
 
@@ -353,27 +572,34 @@ function App() {
                   🧠 AI Analysis
                 </h3>
 
-                <p>
-                  {documentResult.analysis.summary}
-                </p>
-
-                {documentResult.analysis.key_findings && (
-                  <>
-                    <h4>
-                      Key Findings
-                    </h4>
-
-                    <ul>
-                      {documentResult.analysis.key_findings.map(
-                        (finding, index) => (
-                          <li key={index}>
-                            {finding}
-                          </li>
-                        )
-                      )}
-                    </ul>
-                  </>
+                {documentResult.analysis.summary && (
+                  <p>
+                    {documentResult.analysis.summary}
+                  </p>
                 )}
+
+
+                {Array.isArray(
+                  documentResult.analysis.key_findings
+                ) &&
+                  documentResult.analysis.key_findings.length >
+                    0 && (
+                    <>
+                      <h4>
+                        Key Findings
+                      </h4>
+
+                      <ul>
+                        {documentResult.analysis.key_findings.map(
+                          (finding, index) => (
+                            <li key={index}>
+                              {finding}
+                            </li>
+                          )
+                        )}
+                      </ul>
+                    </>
+                  )}
 
               </div>
             )}
@@ -388,33 +614,9 @@ function App() {
                   🤖 Supervisor Agent
                 </h3>
 
-                <div className="information-grid">
-
-                  <div className="information-item">
-
-                    <span className="information-key">
-                      Next Agent
-                    </span>
-
-                    <span className="information-value">
-                      {documentResult.supervisor_decision.next_agent}
-                    </span>
-
-                  </div>
-
-                  <div className="information-item">
-
-                    <span className="information-key">
-                      Decision
-                    </span>
-
-                    <span className="information-value">
-                      {documentResult.supervisor_decision.reason}
-                    </span>
-
-                  </div>
-
-                </div>
+                {renderInformation(
+                  documentResult.supervisor_decision
+                )}
 
               </div>
             )}
@@ -432,9 +634,89 @@ function App() {
                 <p>
                   Status:{" "}
                   <strong>
-                    {documentResult.verification.status}
+                    {
+                      documentResult.verification
+                        .status
+                    }
                   </strong>
                 </p>
+
+
+                {Array.isArray(
+                  documentResult.verification.issues
+                ) &&
+                  documentResult.verification.issues
+                    .length > 0 && (
+                    <>
+                      <h4>
+                        Verification Issues
+                      </h4>
+
+                      <ul>
+                        {documentResult.verification.issues.map(
+                          (issue, index) => (
+                            <li key={index}>
+                              {issue}
+                            </li>
+                          )
+                        )}
+                      </ul>
+                    </>
+                  )}
+
+              </div>
+            )}
+
+
+            {/* AGENT TRACE */}
+
+            {Array.isArray(
+              documentResult.agent_trace
+            ) &&
+              documentResult.agent_trace.length > 0 && (
+                <div className="result-information">
+
+                  <h3>
+                    🔗 Agent Execution Trace
+                  </h3>
+
+                  <div className="information-grid">
+
+                    {documentResult.agent_trace.map(
+                      (agent, index) => (
+                        <div
+                          className="information-item"
+                          key={`${agent}-${index}`}
+                        >
+                          <span className="information-key">
+                            Step {index + 1}
+                          </span>
+
+                          <span className="information-value">
+                            {agent}
+                          </span>
+                        </div>
+                      )
+                    )}
+
+                  </div>
+
+                </div>
+              )}
+
+
+            {/* EXTRACTED TEXT */}
+
+            {documentResult.extracted_text && (
+              <div className="result-information">
+
+                <h3>
+                  📃 Extracted Text
+                </h3>
+
+                <div className="extracted-text">
+                  {documentResult.extracted_text}
+                </div>
 
               </div>
             )}
@@ -445,7 +727,9 @@ function App() {
       )}
 
 
-      {/* DOCUMENT HISTORY */}
+      {/* =====================================================
+          DOCUMENT HISTORY
+      ====================================================== */}
 
       <section className="workflow">
 
@@ -479,6 +763,7 @@ function App() {
           ) : documents.length === 0 ? (
 
             <div className="history-empty">
+
               <div className="file-icon">
                 📄
               </div>
@@ -490,6 +775,7 @@ function App() {
               <p>
                 Process your first document to see it here.
               </p>
+
             </div>
 
           ) : (
@@ -510,7 +796,7 @@ function App() {
                     </div>
 
                     <span className="history-status">
-                      ✓ Verified
+                      {document.status || "Processed"}
                     </span>
 
                   </div>
@@ -522,7 +808,8 @@ function App() {
 
 
                   <p>
-                    {document.document_type}
+                    {document.document_type ||
+                      "Unknown Document"}
                   </p>
 
 
@@ -532,8 +819,11 @@ function App() {
                     onClick={() =>
                       viewDocument(document.id)
                     }
+                    disabled={isLoadingDocument}
                   >
-                    View Document
+                    {isLoadingDocument
+                      ? "Loading..."
+                      : "View Document"}
                   </button>
 
                 </div>
@@ -549,7 +839,9 @@ function App() {
       </section>
 
 
-      {/* SELECTED DOCUMENT */}
+      {/* =====================================================
+          SELECTED DOCUMENT
+      ====================================================== */}
 
       {selectedDocument && (
 
@@ -585,7 +877,7 @@ function App() {
               </span>
 
               <strong>
-                {selectedDocument.filename}
+                {selectedDocument.filename || "N/A"}
               </strong>
 
             </div>
@@ -598,11 +890,27 @@ function App() {
               </span>
 
               <strong>
-                {selectedDocument.document_type}
+                {selectedDocument.document_type ||
+                  "Unknown"}
               </strong>
 
             </div>
 
+
+            <div className="result-row">
+
+              <span>
+                📌 Status
+              </span>
+
+              <strong>
+                {selectedDocument.status || "N/A"}
+              </strong>
+
+            </div>
+
+
+            {/* STORED INFORMATION */}
 
             <div className="result-information">
 
@@ -610,38 +918,67 @@ function App() {
                 ✨ Extracted Information
               </h3>
 
-
-              <div className="information-grid">
-
-                {Object.entries(
-                  selectedDocument.document_information || {}
-                ).map(([key, value]) => (
-
-                  <div
-                    className="information-item"
-                    key={key}
-                  >
-
-                    <span className="information-key">
-                      {key.replaceAll("_", " ")}
-                    </span>
-
-                    <span className="information-value">
-
-                      {Array.isArray(value)
-                        ? value.join(", ")
-                        : String(value)}
-
-                    </span>
-
-                  </div>
-
-                ))}
-
-              </div>
+              {selectedDocument.document_information ? (
+                renderInformation(
+                  selectedDocument.document_information
+                )
+              ) : (
+                <p>
+                  Structured information is not stored in
+                  the current document-history response.
+                </p>
+              )}
 
             </div>
 
+
+            {/* STORED ANALYSIS */}
+
+            {selectedDocument.analysis && (
+              <div className="result-information">
+
+                <h3>
+                  🧠 AI Analysis
+                </h3>
+
+                {typeof selectedDocument.analysis ===
+                "string" ? (
+                  <p>
+                    {selectedDocument.analysis}
+                  </p>
+                ) : (
+                  <>
+                    {selectedDocument.analysis.summary && (
+                      <p>
+                        {
+                          selectedDocument.analysis
+                            .summary
+                        }
+                      </p>
+                    )}
+
+                    {Array.isArray(
+                      selectedDocument.analysis
+                        .key_findings
+                    ) && (
+                      <ul>
+                        {selectedDocument.analysis.key_findings.map(
+                          (finding, index) => (
+                            <li key={index}>
+                              {finding}
+                            </li>
+                          )
+                        )}
+                      </ul>
+                    )}
+                  </>
+                )}
+
+              </div>
+            )}
+
+
+            {/* EXTRACTED TEXT */}
 
             <div className="result-information">
 
@@ -650,10 +987,34 @@ function App() {
               </h3>
 
               <div className="extracted-text">
-                {selectedDocument.extracted_text}
+                {selectedDocument.extracted_text ||
+                  "No extracted text available."}
               </div>
 
             </div>
+
+
+            {/* AGENT TRACE */}
+
+            {selectedDocument.agent_trace && (
+              <div className="result-information">
+
+                <h3>
+                  🔗 Agent Execution Trace
+                </h3>
+
+                <div className="extracted-text">
+                  {Array.isArray(
+                    selectedDocument.agent_trace
+                  )
+                    ? selectedDocument.agent_trace.join(
+                        " → "
+                      )
+                    : selectedDocument.agent_trace}
+                </div>
+
+              </div>
+            )}
 
           </div>
 
@@ -662,7 +1023,9 @@ function App() {
       )}
 
 
-      {/* FEATURES */}
+      {/* =====================================================
+          FEATURES
+      ====================================================== */}
 
       <section className="features">
 
@@ -694,7 +1057,8 @@ function App() {
           </h3>
 
           <p>
-            Autonomous agents classify, analyze and verify documents.
+            Autonomous agents classify, analyze and verify
+            documents.
           </p>
 
         </div>
@@ -711,7 +1075,8 @@ function App() {
           </h3>
 
           <p>
-            Extract meaningful structured enterprise information.
+            Extract meaningful structured enterprise
+            information.
           </p>
 
         </div>
@@ -719,7 +1084,9 @@ function App() {
       </section>
 
 
-      {/* WORKFLOW */}
+      {/* =====================================================
+          WORKFLOW
+      ====================================================== */}
 
       <section className="workflow">
 
@@ -736,7 +1103,8 @@ function App() {
             </h2>
 
             <p>
-              Your intelligent Agentic AI document processing pipeline
+              Your intelligent Agentic AI document processing
+              pipeline
             </p>
 
           </div>
@@ -747,36 +1115,67 @@ function App() {
         <div className="workflow-steps">
 
           <div className="step">
-            <div className="step-number">01</div>
-            <span>Upload</span>
+            <div className="step-number">
+              01
+            </div>
+            <span>
+              Upload
+            </span>
           </div>
 
           <div className="step-line"></div>
 
           <div className="step">
-            <div className="step-number">02</div>
-            <span>Extract</span>
+            <div className="step-number">
+              02
+            </div>
+            <span>
+              Classify
+            </span>
           </div>
 
           <div className="step-line"></div>
 
           <div className="step">
-            <div className="step-number">03</div>
-            <span>Classify</span>
+            <div className="step-number">
+              03
+            </div>
+            <span>
+              Extract
+            </span>
           </div>
 
           <div className="step-line"></div>
 
           <div className="step">
-            <div className="step-number">04</div>
-            <span>Analyze</span>
+            <div className="step-number">
+              04
+            </div>
+            <span>
+              Analyze
+            </span>
           </div>
 
           <div className="step-line"></div>
 
           <div className="step">
-            <div className="step-number">05</div>
-            <span>Verify</span>
+            <div className="step-number">
+              05
+            </div>
+            <span>
+              Supervise
+            </span>
+          </div>
+
+          <div className="step-line"></div>
+
+          <div className="step">
+            <div className="step-number">
+              06
+            </div>
+            <span>
+              Verify
+            </span>
           </div>
 
         </div>

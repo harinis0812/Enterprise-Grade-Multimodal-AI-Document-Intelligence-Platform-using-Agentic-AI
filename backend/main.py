@@ -1,12 +1,10 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from sqlalchemy import text
+from fastapi.middleware.cors import CORSMiddleware
 
-from backend.database.database import engine
 from backend.database.init_db import init_database
-from backend.database.models import Document
-from backend.api.document import router as document_router
+from backend.api import document
 
 
 @asynccontextmanager
@@ -22,51 +20,44 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-init_database()
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Include document API routes
+app.include_router(document.router)
+
 
 @app.get("/")
-def home():
+def root():
     return {
-        "message": "Enterprise Grade Multimodal AI Document Intelligence Platform",
-        "status": "running",
-        "architecture": "Agentic AI"
+        "message": "Welcome to Enterprise Grade Multimodal AI Document Intelligence Platform!"
     }
 
 
 @app.get("/about")
 def about():
     return {
-        "project": "Enterprise Grade Multimodal AI Document Intelligence Platform",
+        "project": "Enterprise-Grade Multimodal AI Document Intelligence Platform using Agentic AI",
         "version": "1.0.0",
-        "technology": [
-            "FastAPI",
-            "PyMuPDF",
-            "PaddleOCR",
-            "LangGraph",
-            "SQLAlchemy",
-            "PostgreSQL",
-            "MLflow",
-            "Docker",
-            "Kubernetes"
-        ]
+        "status": "running"
     }
 
 
 @app.get("/health")
 def health():
-    database_status = "connected"
-
-    try:
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-    except Exception:
-        database_status = "unavailable"
-
     return {
         "status": "healthy",
         "service": "DocuAI",
-        "database": database_status
+        "database": "connected"
     }
-
-
-app.include_router(document_router)
