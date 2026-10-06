@@ -1,0 +1,36 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docuai-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docuai-postgres
+  template:
+    metadata:
+      labels:
+        app: docuai-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "docuai"
+            - name: POSTGRES_USER
+              value: "docuai"
+            - name: POSTGRES_PASSWORD
+              value: "docuai_password"
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - docuai
+                - -d
+                - docuai
+            initialDelaySeconds: 10
+            periodSeconds: 10

@@ -1,4 +1,4 @@
-services:
+﻿services:
 
   postgres:
     image: postgres:16
@@ -15,8 +15,22 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U docuai -d docuai"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+
   backend:
     build: .
+
     container_name: docuai-backend-compose
 
     ports:
@@ -24,9 +38,14 @@ services:
 
     environment:
       DATABASE_URL: postgresql://docuai:docuai_password@postgres:5432/docuai
+      MLFLOW_TRACKING_URI: mlruns
 
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+
+    restart: unless-stopped
+
 
 volumes:
   postgres_data:

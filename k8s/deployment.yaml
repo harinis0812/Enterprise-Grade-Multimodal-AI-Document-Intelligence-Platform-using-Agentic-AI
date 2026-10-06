@@ -1,4 +1,4 @@
-apiVersion: apps/v1
+﻿apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: docuai-backend
@@ -18,14 +18,34 @@ spec:
       containers:
 
         - name: docuai-backend
+
           image: docuai-backend:latest
+
+          imagePullPolicy: IfNotPresent
 
           ports:
             - containerPort: 8000
 
           env:
             - name: DATABASE_URL
-              value: "sqlite:///./docuai.db"
+              value: "postgresql://docuai:docuai_password@docuai-postgres:5432/docuai"
+
+            - name: MLFLOW_TRACKING_URI
+              value: "mlruns"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 20
 
           resources:
             requests:

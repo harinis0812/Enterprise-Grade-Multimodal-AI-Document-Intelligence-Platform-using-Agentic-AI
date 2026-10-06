@@ -1,5 +1,7 @@
 ﻿import json
 import os
+import re
+from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -13,55 +15,76 @@ from backend.services.ocr_service import extract_text_from_image
 
 router = APIRouter()
 
-UPLOAD_DIR = "backend/uploads"
+UPLOAD_DIR = Path("backend/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+def safe_filename(filename: str) -> str:
+    """Return a filesystem-safe filename."""
+    name = Path(filename or "").name
+    stem = Path(name).stem
+    suffix = Path(name).suffix.lower()
+
+    stem = re.sub(r"[^A-Za-z0-9._-]", "_", stem)
+    stem = stem[:180] or "document"
+
+    return f"{stem}{suffix}"
 
 
 @router.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
 
-    allowed_extensions = [".pdf", ".jpg", ".jpeg", ".png"]
-
-    extension = os.path.splitext(file.filename)[1].lower()
-
-    if extension not in allowed_extensions:
+    if not file.filename:
         raise HTTPException(
             status_code=400,
-            detail="Unsupported file type"
+            detail="Filename is required"
         )
 
-    file_path = os.path.join(
-        UPLOAD_DIR,
-        file.filename
-    )
+    extension = Path(file.filename).suffix.lower()
+
+    if extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Allowed: PDF, JPG, JPEG, PNG"
+        )
 
     contents = await file.read()
 
-    with open(file_path, "wb") as output_file:
-        output_file.write(contents)
+    if not contents:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file is empty"
+        )
 
-    db: Session = SessionLocal()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail="File too large. Maximum allowed size is 10 MB"
+        )
+
+    filename = safe_filename(file.filename)
+    file_path = UPLOAD_DIR / filename
 
     try:
-
-        # -----------------------------
-        # DOCUMENT EXTRACTION
-        # -----------------------------
+        file_path.write_bytes(contents)
 
         if extension == ".pdf":
-            extracted_text = extract_text_from_pdf(file_path)
+            extracted_text = extract_text_from_pdf(str(file_path))
         else:
-            extracted_text = extract_text_from_image(file_path)
+            extracted_text = extract_text_from_image(str(file_path))
 
-        # -----------------------------
-        # AGENTIC AI WORKFLOW
-        # -----------------------------
+        if not extracted_text.strip():
+            status = "needs_review"
+        else:
+            status = "processed"
 
         agent = DocumentAgent()
 
         result = agent.process(
-            file.filename,
+            filename,
             extracted_text
         )
 
@@ -92,59 +115,57 @@ async def upload_document(file: UploadFile = File(...)):
 
         status = result.get(
             "status",
-            "processed"
+            status
         )
 
-        # -----------------------------
-        # DATABASE STORAGE
-        # -----------------------------
+        db: Session = SessionLocal()
 
-        document = Document(
-            filename=file.filename,
-            document_type=document_type,
-            status=status,
-            extracted_text=extracted_text,
-            analysis=json.dumps({
-                "document_information": document_information,
-                "analysis": analysis,
-                "verification": verification
-            }),
-            agent_trace=json.dumps(agent_trace)
-        )
+        try:
+            document = Document(
+                filename=filename,
+                document_type=document_type,
+                status=status,
+                extracted_text=extracted_text,
+                analysis=json.dumps(
+                    {
+                        "document_information": document_information,
+                        "analysis": analysis,
+                        "verification": verification
+                    }
+                ),
+                agent_trace=json.dumps(agent_trace)
+            )
 
-        db.add(document)
-        db.commit()
-        db.refresh(document)
+            db.add(document)
+            db.commit()
+            db.refresh(document)
 
-        # -----------------------------
-        # RESPONSE
-        # -----------------------------
+            return {
+                "id": document.id,
+                "filename": document.filename,
+                "document_type": document.document_type,
+                "status": document.status,
+                "message": "Document processed successfully"
+            }
 
-        return {
-            "message": "Document processed successfully",
-            "document_id": document.id,
-            "filename": file.filename,
-            "document_type": document_type,
-            "document_information": document_information,
-            "analysis": analysis,
-            "verification": verification,
-            "agent_trace": agent_trace,
-            "status": status,
-            "extracted_text": extracted_text
-        }
+        except Exception:
+            db.rollback()
+            raise
+
+        finally:
+            db.close()
+
+    except HTTPException:
+        raise
 
     except Exception as error:
-
-        db.rollback()
-
         raise HTTPException(
             status_code=500,
             detail=f"Document processing failed: {str(error)}"
         )
 
     finally:
-
-        db.close()
+        await file.close()
 
 
 @router.get("/documents")
@@ -153,7 +174,6 @@ def get_documents():
     db: Session = SessionLocal()
 
     try:
-
         documents = (
             db.query(Document)
             .order_by(Document.id.desc())
@@ -175,7 +195,6 @@ def get_documents():
         }
 
     finally:
-
         db.close()
 
 
@@ -185,7 +204,6 @@ def get_document(document_id: int):
     db: Session = SessionLocal()
 
     try:
-
         document = (
             db.query(Document)
             .filter(Document.id == document_id)
@@ -210,5 +228,4 @@ def get_document(document_id: int):
         }
 
     finally:
-
         db.close()
