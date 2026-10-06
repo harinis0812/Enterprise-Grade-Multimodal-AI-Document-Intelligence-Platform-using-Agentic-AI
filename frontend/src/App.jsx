@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import "./App.css";
 
 const API_URL = "http://127.0.0.1:8000";
@@ -9,7 +9,7 @@ const ALLOWED_TYPES = [
   "image/png",
 ];
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -31,10 +31,11 @@ function App() {
   }, []);
 
   /*
-   * Safely read JSON from the backend.
+   * Safely read a backend response.
    */
   async function readResponse(response) {
-    const contentType = response.headers.get("content-type") || "";
+    const contentType =
+      response.headers.get("content-type") || "";
 
     if (contentType.includes("application/json")) {
       return await response.json();
@@ -43,8 +44,101 @@ function App() {
     const text = await response.text();
 
     return {
-      detail: text || "The backend returned an unexpected response.",
+      detail:
+        text || "The backend returned an unexpected response.",
     };
+  }
+
+  /*
+   * Parse the JSON stored by the backend in the
+   * analysis database column.
+   */
+  function parseStoredAnalysis(data) {
+    let parsedAnalysis = {};
+
+    if (
+      typeof data.analysis === "string" &&
+      data.analysis.trim()
+    ) {
+      try {
+        parsedAnalysis = JSON.parse(data.analysis);
+      } catch (error) {
+        console.error(
+          "Unable to parse stored analysis:",
+          error
+        );
+      }
+    } else if (
+      data.analysis &&
+      typeof data.analysis === "object"
+    ) {
+      parsedAnalysis = data.analysis;
+    }
+
+    let parsedTrace = data.agent_trace;
+
+    if (
+      typeof parsedTrace === "string" &&
+      parsedTrace.trim()
+    ) {
+      try {
+        parsedTrace = JSON.parse(parsedTrace);
+      } catch (error) {
+        console.warn(
+          "Unable to parse agent trace:",
+          error
+        );
+      }
+    }
+
+    return {
+      ...data,
+
+      document_information:
+        data.document_information ||
+        parsedAnalysis.document_information ||
+        {},
+
+      analysis:
+        parsedAnalysis.analysis ||
+        (
+          data.analysis &&
+          typeof data.analysis === "object"
+            ? data.analysis
+            : null
+        ),
+
+      verification:
+        data.verification ||
+        parsedAnalysis.verification ||
+        {},
+
+      supervisor_decision:
+        data.supervisor_decision ||
+        parsedAnalysis.supervisor_decision ||
+        null,
+
+      agent_trace: parsedTrace || [],
+    };
+  }
+
+  /*
+   * Fetch complete document details.
+   */
+  async function fetchDocumentDetails(documentId) {
+    const response = await fetch(
+      `${API_URL}/documents/${documentId}`
+    );
+
+    const data = await readResponse(response);
+
+    if (!response.ok) {
+      throw new Error(
+        data.detail || "Unable to load document details."
+      );
+    }
+
+    return parseStoredAnalysis(data);
   }
 
   /*
@@ -55,13 +149,16 @@ function App() {
       setIsLoadingDocuments(true);
       setErrorMessage("");
 
-      const response = await fetch(`${API_URL}/documents`);
+      const response = await fetch(
+        `${API_URL}/documents`
+      );
 
       const data = await readResponse(response);
 
       if (!response.ok) {
         throw new Error(
-          data.detail || "Unable to load document history."
+          data.detail ||
+            "Unable to load document history."
         );
       }
 
@@ -78,7 +175,7 @@ function App() {
       setDocuments([]);
 
       setErrorMessage(
-        `Unable to connect to the backend. Make sure FastAPI is running at ${API_URL}.`
+        `Unable to connect to the backend at ${API_URL}.`
       );
     } finally {
       setIsLoadingDocuments(false);
@@ -86,7 +183,7 @@ function App() {
   }
 
   /*
-   * Validate the selected file.
+   * Validate selected file.
    */
   function validateFile(file) {
     if (!file) {
@@ -94,11 +191,16 @@ function App() {
     }
 
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return "Unsupported file type. Please upload PDF, JPG, JPEG or PNG.";
+      return (
+        "Unsupported file type. Please upload " +
+        "PDF, JPG, JPEG or PNG."
+      );
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return "File is too large. Maximum allowed size is 20 MB.";
+      return (
+        "File is too large. Maximum allowed size is 20 MB."
+      );
     }
 
     return "";
@@ -131,15 +233,23 @@ function App() {
   }
 
   /*
-   * Upload and process the document.
+   * Upload and process document.
+   *
+   * Important:
+   * /upload returns a summary response.
+   * We then request /documents/{id} to retrieve
+   * the complete extracted information.
    */
   async function handleUpload() {
     if (!selectedFile) {
-      setUploadStatus("Please select a document first.");
+      setUploadStatus(
+        "Please select a document first."
+      );
       return;
     }
 
-    const validationError = validateFile(selectedFile);
+    const validationError =
+      validateFile(selectedFile);
 
     if (validationError) {
       setErrorMessage(validationError);
@@ -148,19 +258,23 @@ function App() {
 
     try {
       setIsProcessing(true);
-      setUploadStatus("Processing your document...");
+      setUploadStatus(
+        "Processing document through AI agents..."
+      );
       setErrorMessage("");
       setDocumentResult(null);
       setSelectedDocument(null);
 
       const formData = new FormData();
-
       formData.append("file", selectedFile);
 
-      const response = await fetch(`${API_URL}/upload`, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        `${API_URL}/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       const data = await readResponse(response);
 
@@ -171,20 +285,42 @@ function App() {
       }
 
       /*
-       * Store the complete processing result.
+       * Retrieve the complete processed document.
        */
-      setDocumentResult(data);
+      let completeDocument = data;
+
+      if (data.id) {
+        completeDocument =
+          await fetchDocumentDetails(data.id);
+      }
+
+      setDocumentResult(completeDocument);
 
       setUploadStatus(
-        "Document processed successfully!"
+        "Document processed successfully."
       );
 
       setSelectedFile(null);
 
-      /*
-       * Refresh document history.
-       */
       await loadDocuments();
+
+      /*
+       * Scroll to the result section.
+       */
+      setTimeout(() => {
+        const resultElement =
+          document.getElementById(
+            "current-result"
+          );
+
+        if (resultElement) {
+          resultElement.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }
+      }, 150);
+
     } catch (error) {
       console.error("Upload error:", error);
 
@@ -192,10 +328,12 @@ function App() {
 
       if (
         error instanceof TypeError &&
-        error.message.toLowerCase().includes("fetch")
+        error.message
+          .toLowerCase()
+          .includes("fetch")
       ) {
         setErrorMessage(
-          `Cannot connect to the backend at ${API_URL}. Start the FastAPI server first.`
+          `Cannot connect to the backend at ${API_URL}.`
         );
       } else {
         setErrorMessage(
@@ -217,31 +355,34 @@ function App() {
       setErrorMessage("");
       setSelectedDocument(null);
 
-      const response = await fetch(
-        `${API_URL}/documents/${documentId}`
-      );
+      const completeDocument =
+        await fetchDocumentDetails(documentId);
 
-      const data = await readResponse(response);
-
-      if (!response.ok) {
-        throw new Error(
-          data.detail || "Unable to load document."
-        );
-      }
-
-      setSelectedDocument(data);
+      setSelectedDocument(completeDocument);
 
       setTimeout(() => {
-        window.scrollTo({
-          top: document.body.scrollHeight,
-          behavior: "smooth",
-        });
-      }, 100);
+        const element =
+          document.getElementById(
+            "selected-document"
+          );
+
+        if (element) {
+          element.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }
+      }, 150);
+
     } catch (error) {
-      console.error("Document error:", error);
+      console.error(
+        "Document error:",
+        error
+      );
 
       setErrorMessage(
-        error.message || "Unable to load document."
+        error.message ||
+          "Unable to load document."
       );
     } finally {
       setIsLoadingDocument(false);
@@ -254,16 +395,21 @@ function App() {
   function formatKey(key) {
     return key
       .replaceAll("_", " ")
-      .replace(/\b\w/g, (character) =>
-        character.toUpperCase()
+      .replace(
+        /\b\w/g,
+        (character) =>
+          character.toUpperCase()
       );
   }
 
   /*
-   * Convert any value into something displayable.
+   * Convert values into readable display text.
    */
   function formatValue(value) {
-    if (value === null || value === undefined) {
+    if (
+      value === null ||
+      value === undefined
+    ) {
       return "N/A";
     }
 
@@ -271,33 +417,54 @@ function App() {
       return value.join(", ");
     }
 
-    if (typeof value === "object") {
-      return JSON.stringify(value, null, 2);
+    if (
+      typeof value === "object"
+    ) {
+      return JSON.stringify(
+        value,
+        null,
+        2
+      );
+    }
+
+    if (typeof value === "boolean") {
+      return value ? "Yes" : "No";
     }
 
     return String(value);
   }
 
   /*
-   * Render extracted information safely.
+   * Render extracted information.
    */
-  function renderInformation(information) {
+  function renderInformation(
+    information
+  ) {
     if (
       !information ||
-      typeof information !== "object" ||
-      Object.keys(information).length === 0
+      typeof information !==
+        "object" ||
+      Object.keys(information)
+        .length === 0
     ) {
       return (
-        <p>
-          No structured information was returned for this
-          document.
-        </p>
+        <div className="empty-result">
+          <span className="empty-result-icon">
+            --
+          </span>
+          <p>
+            No structured information was
+            returned for this document.
+          </p>
+        </div>
       );
     }
 
     return (
       <div className="information-grid">
-        {Object.entries(information).map(
+        {Object.entries(
+          information
+        ).map(
           ([key, value]) => (
             <div
               className="information-item"
@@ -317,20 +484,194 @@ function App() {
     );
   }
 
+  /*
+   * Render AI analysis.
+   */
+  function renderAnalysis(
+    analysis
+  ) {
+    if (
+      !analysis ||
+      typeof analysis !== "object"
+    ) {
+      return null;
+    }
+
+    return (
+      <div className="analysis-card">
+        {analysis.summary && (
+          <p className="analysis-summary">
+            {analysis.summary}
+          </p>
+        )}
+
+        {Array.isArray(
+          analysis.key_findings
+        ) &&
+          analysis.key_findings.length >
+            0 && (
+            <div className="key-findings">
+              <h4>
+                Key Findings
+              </h4>
+
+              <ul>
+                {analysis.key_findings.map(
+                  (
+                    finding,
+                    index
+                  ) => (
+                    <li
+                      key={index}
+                    >
+                      {finding}
+                    </li>
+                  )
+                )}
+              </ul>
+            </div>
+          )}
+
+        {analysis.status && (
+          <div className="analysis-status">
+            <span>
+              Analysis Status
+            </span>
+
+            <strong>
+              {formatValue(
+                analysis.status
+              )}
+            </strong>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /*
+   * Render verification.
+   */
+  function renderVerification(
+    verification
+  ) {
+    if (
+      !verification ||
+      typeof verification !==
+        "object" ||
+      Object.keys(verification)
+        .length === 0
+    ) {
+      return null;
+    }
+
+    return (
+      <div className="verification-card">
+        <div className="verification-status">
+          {verification.status ||
+            "Verified"}
+        </div>
+
+        {Array.isArray(
+          verification.issues
+        ) &&
+          verification.issues.length >
+            0 && (
+            <div className="key-findings">
+              <h4>
+                Verification Issues
+              </h4>
+
+              <ul>
+                {verification.issues.map(
+                  (
+                    issue,
+                    index
+                  ) => (
+                    <li
+                      key={index}
+                    >
+                      {issue}
+                    </li>
+                  )
+                )}
+              </ul>
+            </div>
+          )}
+
+        {verification.message && (
+          <p className="analysis-summary">
+            {verification.message}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  /*
+   * Render agent execution trace.
+   */
+  function renderAgentTrace(
+    trace
+  ) {
+    if (
+      !Array.isArray(trace) ||
+      trace.length === 0
+    ) {
+      return null;
+    }
+
+    return (
+      <div className="agent-trace">
+        {trace.map(
+          (agent, index) => (
+            <div
+              className="trace-step"
+              key={`${agent}-${index}`}
+            >
+              <div className="trace-number">
+                {String(
+                  index + 1
+                ).padStart(2, "0")}
+              </div>
+
+              <div className="trace-content">
+                <span className="trace-label">
+                  Agent
+                </span>
+
+                <strong>
+                  {agent}
+                </strong>
+              </div>
+
+              {index <
+                trace.length - 1 && (
+                <div className="trace-arrow">
+                  →
+                </div>
+              )}
+            </div>
+          )
+        )}
+      </div>
+    );
+  }
+
   return (
     <main className="docuai-app">
 
-      {/* =====================================================
-          HERO
-      ====================================================== */}
+      {/* HERO */}
 
       <section className="hero">
 
         <div className="ai-icon">
-          <div className="icon-orbit orbit-one"></div>
-          <div className="icon-orbit orbit-two"></div>
+          <div className="ai-core">
+            <span>AI</span>
+          </div>
 
-          <span>✦</span>
+          <div className="ai-ring ai-ring-one"></div>
+          <div className="ai-ring ai-ring-two"></div>
         </div>
 
         <div className="hero-content">
@@ -345,14 +686,15 @@ function App() {
           </h1>
 
           <p className="subtitle">
-            Enterprise Multimodal AI Document Intelligence
-            Platform
+            Enterprise Multimodal AI
+            Document Intelligence Platform
           </p>
 
           <p className="description">
-            Upload documents, extract information, classify
-            content, and let autonomous AI agents transform
-            unstructured data into intelligent insights.
+            Upload documents, extract information,
+            classify content, and let autonomous
+            AI agents transform unstructured data
+            into intelligent insights.
           </p>
 
         </div>
@@ -360,38 +702,36 @@ function App() {
       </section>
 
 
-      {/* =====================================================
-          ERROR MESSAGE
-      ====================================================== */}
+      {/* ERROR */}
 
       {errorMessage && (
-        <section className="upload-section">
-
-          <div className="upload-status">
-            ⚠️ {errorMessage}
+        <section className="error-section">
+          <div className="error-message">
+            <span>!</span>
+            {errorMessage}
           </div>
-
         </section>
       )}
 
 
-      {/* =====================================================
-          UPLOAD
-      ====================================================== */}
+      {/* UPLOAD */}
 
       <section className="upload-section">
 
         <div className="section-title">
 
           <div className="section-icon">
-            ⬆
+            UP
           </div>
 
           <div>
-            <h2>Upload Document</h2>
+            <h2>
+              Upload Document
+            </h2>
 
             <p>
-              Start your Agentic AI-powered document analysis
+              Start your Agentic AI-powered
+              document analysis
             </p>
           </div>
 
@@ -414,13 +754,21 @@ function App() {
 
             <div className="upload-animation">
 
-              <div className="upload-ring ring-one"></div>
+              <div className="upload-glow"></div>
 
-              <div className="upload-ring ring-two"></div>
+              <div className="document-icon">
+                <div className="document-fold"></div>
 
-              <div className="file-icon">
-                📄
+                <div className="document-lines">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
               </div>
+
+              <div className="processing-dot dot-one"></div>
+              <div className="processing-dot dot-two"></div>
+              <div className="processing-dot dot-three"></div>
 
             </div>
 
@@ -432,7 +780,7 @@ function App() {
                 </h3>
 
                 <p>
-                  File selected successfully ✓
+                  File selected successfully
                 </p>
 
                 <span className="choose-file">
@@ -462,7 +810,10 @@ function App() {
             type="button"
             className="upload-button"
             onClick={handleUpload}
-            disabled={!selectedFile || isProcessing}
+            disabled={
+              !selectedFile ||
+              isProcessing
+            }
           >
             {isProcessing
               ? "Processing..."
@@ -481,24 +832,28 @@ function App() {
       </section>
 
 
-      {/* =====================================================
-          CURRENT RESULT
-      ====================================================== */}
+      {/* CURRENT RESULT */}
 
       {documentResult && (
-        <section className="result-section">
+        <section
+          className="result-section"
+          id="current-result"
+        >
 
           <div className="workflow-header">
 
             <div className="section-icon">
-              ✦
+              AI
             </div>
 
             <div>
-              <h2>AI Analysis Result</h2>
+              <h2>
+                AI Analysis Result
+              </h2>
 
               <p>
-                Your document was successfully processed
+                Autonomous document
+                processing completed
               </p>
             </div>
 
@@ -507,43 +862,61 @@ function App() {
 
           <div className="result-card">
 
+            <div className="result-header">
+              <div>
+                <span className="result-label">
+                  PROCESSING COMPLETE
+                </span>
+
+                <h3>
+                  {documentResult.filename ||
+                    "Document"}
+                </h3>
+              </div>
+
+              <span className="verified-badge">
+                {documentResult.status ||
+                  "Processed"}
+              </span>
+            </div>
+
+
             {/* BASIC INFORMATION */}
 
-            <div className="result-row">
+            <div className="result-grid">
 
-              <span>
-                📄 Filename
-              </span>
+              <div className="result-stat">
+                <span>
+                  Document Type
+                </span>
 
-              <strong>
-                {documentResult.filename || "N/A"}
-              </strong>
+                <strong>
+                  {documentResult.document_type ||
+                    "Unknown"}
+                </strong>
+              </div>
 
-            </div>
+              <div className="result-stat">
+                <span>
+                  Processing Status
+                </span>
 
+                <strong>
+                  {documentResult.status ||
+                    "Processed"}
+                </strong>
+              </div>
 
-            <div className="result-row">
+              <div className="result-stat">
+                <span>
+                  Document ID
+                </span>
 
-              <span>
-                🏷 Document Type
-              </span>
-
-              <strong>
-                {documentResult.document_type || "Unknown"}
-              </strong>
-
-            </div>
-
-
-            <div className="result-row">
-
-              <span>
-                📌 Processing Status
-              </span>
-
-              <strong>
-                {documentResult.status || "Processed"}
-              </strong>
+                <strong>
+                  {documentResult.id ||
+                    "N/A"}
+                </strong>
+              </div>
 
             </div>
 
@@ -552,9 +925,23 @@ function App() {
 
             <div className="result-information">
 
-              <h3>
-                ✨ Extracted Information
-              </h3>
+              <div className="result-heading">
+                <span className="heading-number">
+                  01
+                </span>
+
+                <div>
+                  <h3>
+                    Extracted Information
+                  </h3>
+
+                  <p>
+                    Structured information
+                    identified by the
+                    processing agents
+                  </p>
+                </div>
+              </div>
 
               {renderInformation(
                 documentResult.document_information
@@ -563,43 +950,32 @@ function App() {
             </div>
 
 
-            {/* ANALYSIS */}
+            {/* AI ANALYSIS */}
 
             {documentResult.analysis && (
               <div className="result-information">
 
-                <h3>
-                  🧠 AI Analysis
-                </h3>
+                <div className="result-heading">
+                  <span className="heading-number">
+                    02
+                  </span>
 
-                {documentResult.analysis.summary && (
-                  <p>
-                    {documentResult.analysis.summary}
-                  </p>
+                  <div>
+                    <h3>
+                      AI Analysis
+                    </h3>
+
+                    <p>
+                      Analysis generated
+                      from the extracted
+                      document content
+                    </p>
+                  </div>
+                </div>
+
+                {renderAnalysis(
+                  documentResult.analysis
                 )}
-
-
-                {Array.isArray(
-                  documentResult.analysis.key_findings
-                ) &&
-                  documentResult.analysis.key_findings.length >
-                    0 && (
-                    <>
-                      <h4>
-                        Key Findings
-                      </h4>
-
-                      <ul>
-                        {documentResult.analysis.key_findings.map(
-                          (finding, index) => (
-                            <li key={index}>
-                              {finding}
-                            </li>
-                          )
-                        )}
-                      </ul>
-                    </>
-                  )}
 
               </div>
             )}
@@ -610,13 +986,28 @@ function App() {
             {documentResult.supervisor_decision && (
               <div className="result-information">
 
-                <h3>
-                  🤖 Supervisor Agent
-                </h3>
+                <div className="result-heading">
+                  <span className="heading-number">
+                    03
+                  </span>
 
-                {renderInformation(
-                  documentResult.supervisor_decision
-                )}
+                  <div>
+                    <h3>
+                      Supervisor Agent
+                    </h3>
+
+                    <p>
+                      Workflow decision
+                      and routing
+                    </p>
+                  </div>
+                </div>
+
+                <div className="analysis-card">
+                  {renderInformation(
+                    documentResult.supervisor_decision
+                  )}
+                </div>
 
               </div>
             )}
@@ -624,82 +1015,65 @@ function App() {
 
             {/* VERIFICATION */}
 
-            {documentResult.verification && (
-              <div className="result-information">
+            {documentResult.verification &&
+              Object.keys(
+                documentResult.verification
+              ).length > 0 && (
+                <div className="result-information">
 
-                <h3>
-                  ✅ Verification
-                </h3>
+                  <div className="result-heading">
+                    <span className="heading-number">
+                      04
+                    </span>
 
-                <p>
-                  Status:{" "}
-                  <strong>
-                    {
-                      documentResult.verification
-                        .status
-                    }
-                  </strong>
-                </p>
+                    <div>
+                      <h3>
+                        Verification
+                      </h3>
 
+                      <p>
+                        Final validation
+                        performed by the
+                        verification agent
+                      </p>
+                    </div>
+                  </div>
 
-                {Array.isArray(
-                  documentResult.verification.issues
-                ) &&
-                  documentResult.verification.issues
-                    .length > 0 && (
-                    <>
-                      <h4>
-                        Verification Issues
-                      </h4>
-
-                      <ul>
-                        {documentResult.verification.issues.map(
-                          (issue, index) => (
-                            <li key={index}>
-                              {issue}
-                            </li>
-                          )
-                        )}
-                      </ul>
-                    </>
+                  {renderVerification(
+                    documentResult.verification
                   )}
 
-              </div>
-            )}
+                </div>
+              )}
 
 
             {/* AGENT TRACE */}
 
-            {Array.isArray(
-              documentResult.agent_trace
-            ) &&
-              documentResult.agent_trace.length > 0 && (
+            {documentResult.agent_trace &&
+              documentResult.agent_trace.length >
+                0 && (
                 <div className="result-information">
 
-                  <h3>
-                    🔗 Agent Execution Trace
-                  </h3>
+                  <div className="result-heading">
+                    <span className="heading-number">
+                      05
+                    </span>
 
-                  <div className="information-grid">
+                    <div>
+                      <h3>
+                        Agent Execution Trace
+                      </h3>
 
-                    {documentResult.agent_trace.map(
-                      (agent, index) => (
-                        <div
-                          className="information-item"
-                          key={`${agent}-${index}`}
-                        >
-                          <span className="information-key">
-                            Step {index + 1}
-                          </span>
-
-                          <span className="information-value">
-                            {agent}
-                          </span>
-                        </div>
-                      )
-                    )}
-
+                      <p>
+                        Autonomous processing
+                        workflow
+                      </p>
+                    </div>
                   </div>
+
+                  {renderAgentTrace(
+                    documentResult.agent_trace
+                  )}
 
                 </div>
               )}
@@ -710,9 +1084,22 @@ function App() {
             {documentResult.extracted_text && (
               <div className="result-information">
 
-                <h3>
-                  📃 Extracted Text
-                </h3>
+                <div className="result-heading">
+                  <span className="heading-number">
+                    06
+                  </span>
+
+                  <div>
+                    <h3>
+                      Extracted Text
+                    </h3>
+
+                    <p>
+                      Raw text recovered
+                      from the document
+                    </p>
+                  </div>
+                </div>
 
                 <div className="extracted-text">
                   {documentResult.extracted_text}
@@ -727,28 +1114,25 @@ function App() {
       )}
 
 
-      {/* =====================================================
-          DOCUMENT HISTORY
-      ====================================================== */}
+      {/* DOCUMENT HISTORY */}
 
       <section className="workflow">
 
         <div className="workflow-header">
 
           <div className="section-icon">
-            📚
+            DB
           </div>
 
           <div>
-
             <h2>
               Document History
             </h2>
 
             <p>
-              Previously processed enterprise documents
+              Previously processed enterprise
+              documents
             </p>
-
           </div>
 
         </div>
@@ -764,8 +1148,8 @@ function App() {
 
             <div className="history-empty">
 
-              <div className="file-icon">
-                📄
+              <div className="empty-document-icon">
+                DOC
               </div>
 
               <h3>
@@ -773,7 +1157,8 @@ function App() {
               </h3>
 
               <p>
-                Process your first document to see it here.
+                Process your first document
+                to see it here.
               </p>
 
             </div>
@@ -782,53 +1167,60 @@ function App() {
 
             <div className="history-grid">
 
-              {documents.map((document) => (
+              {documents.map(
+                (document) => (
 
-                <div
-                  className="history-card"
-                  key={document.id}
-                >
+                  <div
+                    className="history-card"
+                    key={document.id}
+                  >
 
-                  <div className="history-top">
+                    <div className="history-top">
 
-                    <div className="history-file-icon">
-                      📄
+                      <div className="history-file-icon">
+                        DOC
+                      </div>
+
+                      <span className="history-status">
+                        {document.status ||
+                          "Processed"}
+                      </span>
+
                     </div>
 
-                    <span className="history-status">
-                      {document.status || "Processed"}
-                    </span>
+
+                    <h3>
+                      {document.filename}
+                    </h3>
+
+
+                    <p>
+                      {document.document_type ||
+                        "Unknown Document"}
+                    </p>
+
+
+                    <button
+                      type="button"
+                      className="view-button"
+                      onClick={() =>
+                        viewDocument(
+                          document.id
+                        )
+                      }
+                      disabled={
+                        isLoadingDocument
+                      }
+                    >
+                      {isLoadingDocument
+                        ? "Loading..."
+                        : "View Document"}
+                    </button>
 
                   </div>
 
-
-                  <h3>
-                    {document.filename}
-                  </h3>
-
-
-                  <p>
-                    {document.document_type ||
-                      "Unknown Document"}
-                  </p>
-
-
-                  <button
-                    type="button"
-                    className="view-button"
-                    onClick={() =>
-                      viewDocument(document.id)
-                    }
-                    disabled={isLoadingDocument}
-                  >
-                    {isLoadingDocument
-                      ? "Loading..."
-                      : "View Document"}
-                  </button>
-
-                </div>
-
-              ))}
+                )
+              )}
 
             </div>
 
@@ -839,18 +1231,19 @@ function App() {
       </section>
 
 
-      {/* =====================================================
-          SELECTED DOCUMENT
-      ====================================================== */}
+      {/* SELECTED DOCUMENT */}
 
       {selectedDocument && (
 
-        <section className="result-section">
+        <section
+          className="result-section"
+          id="selected-document"
+        >
 
           <div className="workflow-header">
 
             <div className="section-icon">
-              📑
+              DOC
             </div>
 
             <div>
@@ -860,7 +1253,8 @@ function App() {
               </h2>
 
               <p>
-                Stored document information
+                Complete stored processing
+                information
               </p>
 
             </div>
@@ -870,42 +1264,59 @@ function App() {
 
           <div className="result-card">
 
-            <div className="result-row">
+            <div className="result-header">
+              <div>
+                <span className="result-label">
+                  STORED DOCUMENT
+                </span>
 
-              <span>
-                📄 Filename
+                <h3>
+                  {selectedDocument.filename ||
+                    "Document"}
+                </h3>
+              </div>
+
+              <span className="verified-badge">
+                {selectedDocument.status ||
+                  "Processed"}
               </span>
-
-              <strong>
-                {selectedDocument.filename || "N/A"}
-              </strong>
-
             </div>
 
 
-            <div className="result-row">
+            <div className="result-grid">
 
-              <span>
-                🏷 Document Type
-              </span>
+              <div className="result-stat">
+                <span>
+                  Document Type
+                </span>
 
-              <strong>
-                {selectedDocument.document_type ||
-                  "Unknown"}
-              </strong>
+                <strong>
+                  {selectedDocument.document_type ||
+                    "Unknown"}
+                </strong>
+              </div>
 
-            </div>
+              <div className="result-stat">
+                <span>
+                  Status
+                </span>
 
+                <strong>
+                  {selectedDocument.status ||
+                    "N/A"}
+                </strong>
+              </div>
 
-            <div className="result-row">
+              <div className="result-stat">
+                <span>
+                  Document ID
+                </span>
 
-              <span>
-                📌 Status
-              </span>
-
-              <strong>
-                {selectedDocument.status || "N/A"}
-              </strong>
+                <strong>
+                  {selectedDocument.id ||
+                    "N/A"}
+                </strong>
+              </div>
 
             </div>
 
@@ -914,19 +1325,25 @@ function App() {
 
             <div className="result-information">
 
-              <h3>
-                ✨ Extracted Information
-              </h3>
+              <div className="result-heading">
+                <span className="heading-number">
+                  01
+                </span>
 
-              {selectedDocument.document_information ? (
-                renderInformation(
-                  selectedDocument.document_information
-                )
-              ) : (
-                <p>
-                  Structured information is not stored in
-                  the current document-history response.
-                </p>
+                <div>
+                  <h3>
+                    Extracted Information
+                  </h3>
+
+                  <p>
+                    Structured information
+                    stored for this document
+                  </p>
+                </div>
+              </div>
+
+              {renderInformation(
+                selectedDocument.document_information
               )}
 
             </div>
@@ -937,54 +1354,82 @@ function App() {
             {selectedDocument.analysis && (
               <div className="result-information">
 
-                <h3>
-                  🧠 AI Analysis
-                </h3>
+                <div className="result-heading">
+                  <span className="heading-number">
+                    02
+                  </span>
 
-                {typeof selectedDocument.analysis ===
-                "string" ? (
-                  <p>
-                    {selectedDocument.analysis}
-                  </p>
-                ) : (
-                  <>
-                    {selectedDocument.analysis.summary && (
-                      <p>
-                        {
-                          selectedDocument.analysis
-                            .summary
-                        }
-                      </p>
-                    )}
+                  <div>
+                    <h3>
+                      AI Analysis
+                    </h3>
 
-                    {Array.isArray(
-                      selectedDocument.analysis
-                        .key_findings
-                    ) && (
-                      <ul>
-                        {selectedDocument.analysis.key_findings.map(
-                          (finding, index) => (
-                            <li key={index}>
-                              {finding}
-                            </li>
-                          )
-                        )}
-                      </ul>
-                    )}
-                  </>
+                    <p>
+                      Stored document analysis
+                    </p>
+                  </div>
+                </div>
+
+                {renderAnalysis(
+                  selectedDocument.analysis
                 )}
 
               </div>
             )}
 
 
+            {/* VERIFICATION */}
+
+            {selectedDocument.verification &&
+              Object.keys(
+                selectedDocument.verification
+              ).length > 0 && (
+                <div className="result-information">
+
+                  <div className="result-heading">
+                    <span className="heading-number">
+                      03
+                    </span>
+
+                    <div>
+                      <h3>
+                        Verification
+                      </h3>
+
+                      <p>
+                        Verification result
+                      </p>
+                    </div>
+                  </div>
+
+                  {renderVerification(
+                    selectedDocument.verification
+                  )}
+
+                </div>
+              )}
+
+
             {/* EXTRACTED TEXT */}
 
             <div className="result-information">
 
-              <h3>
-                📃 Extracted Text
-              </h3>
+              <div className="result-heading">
+                <span className="heading-number">
+                  04
+                </span>
+
+                <div>
+                  <h3>
+                    Extracted Text
+                  </h3>
+
+                  <p>
+                    Text recovered from the
+                    stored document
+                  </p>
+                </div>
+              </div>
 
               <div className="extracted-text">
                 {selectedDocument.extracted_text ||
@@ -996,43 +1441,49 @@ function App() {
 
             {/* AGENT TRACE */}
 
-            {selectedDocument.agent_trace && (
-              <div className="result-information">
+            {selectedDocument.agent_trace &&
+              selectedDocument.agent_trace.length >
+                0 && (
+                <div className="result-information">
 
-                <h3>
-                  🔗 Agent Execution Trace
-                </h3>
+                  <div className="result-heading">
+                    <span className="heading-number">
+                      05
+                    </span>
 
-                <div className="extracted-text">
-                  {Array.isArray(
+                    <div>
+                      <h3>
+                        Agent Execution Trace
+                      </h3>
+
+                      <p>
+                        Stored autonomous
+                        workflow trace
+                      </p>
+                    </div>
+                  </div>
+
+                  {renderAgentTrace(
                     selectedDocument.agent_trace
-                  )
-                    ? selectedDocument.agent_trace.join(
-                        " → "
-                      )
-                    : selectedDocument.agent_trace}
-                </div>
+                  )}
 
-              </div>
-            )}
+                </div>
+              )}
 
           </div>
 
         </section>
-
       )}
 
 
-      {/* =====================================================
-          FEATURES
-      ====================================================== */}
+      {/* FEATURES */}
 
       <section className="features">
 
         <div className="feature-card">
 
           <div className="feature-icon purple">
-            ◈
+            PDF
           </div>
 
           <h3>
@@ -1040,7 +1491,9 @@ function App() {
           </h3>
 
           <p>
-            Process PDFs, scanned documents and images.
+            Process PDFs, scanned documents
+            and images using document
+            extraction and OCR.
           </p>
 
         </div>
@@ -1049,7 +1502,7 @@ function App() {
         <div className="feature-card">
 
           <div className="feature-icon cyan">
-            ✦
+            AI
           </div>
 
           <h3>
@@ -1057,8 +1510,9 @@ function App() {
           </h3>
 
           <p>
-            Autonomous agents classify, analyze and verify
-            documents.
+            Autonomous agents classify,
+            extract, analyze, supervise
+            and verify documents.
           </p>
 
         </div>
@@ -1067,7 +1521,7 @@ function App() {
         <div className="feature-card">
 
           <div className="feature-icon purple">
-            ⌘
+            NLP
           </div>
 
           <h3>
@@ -1075,7 +1529,8 @@ function App() {
           </h3>
 
           <p>
-            Extract meaningful structured enterprise
+            Convert unstructured enterprise
+            documents into structured
             information.
           </p>
 
@@ -1084,16 +1539,14 @@ function App() {
       </section>
 
 
-      {/* =====================================================
-          WORKFLOW
-      ====================================================== */}
+      {/* WORKFLOW */}
 
       <section className="workflow">
 
         <div className="workflow-header">
 
           <div className="section-icon">
-            ⌁
+            FLOW
           </div>
 
           <div>
@@ -1103,8 +1556,8 @@ function App() {
             </h2>
 
             <p>
-              Your intelligent Agentic AI document processing
-              pipeline
+              Intelligent Agentic AI document
+              processing pipeline
             </p>
 
           </div>
@@ -1118,6 +1571,7 @@ function App() {
             <div className="step-number">
               01
             </div>
+
             <span>
               Upload
             </span>
@@ -1129,6 +1583,7 @@ function App() {
             <div className="step-number">
               02
             </div>
+
             <span>
               Classify
             </span>
@@ -1140,6 +1595,7 @@ function App() {
             <div className="step-number">
               03
             </div>
+
             <span>
               Extract
             </span>
@@ -1151,6 +1607,7 @@ function App() {
             <div className="step-number">
               04
             </div>
+
             <span>
               Analyze
             </span>
@@ -1162,6 +1619,7 @@ function App() {
             <div className="step-number">
               05
             </div>
+
             <span>
               Supervise
             </span>
@@ -1173,6 +1631,7 @@ function App() {
             <div className="step-number">
               06
             </div>
+
             <span>
               Verify
             </span>
