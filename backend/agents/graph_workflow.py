@@ -2,6 +2,13 @@ from typing import TypedDict, Dict, Any, List
 
 from langgraph.graph import StateGraph, START, END
 
+from backend.services.document_classifier import detect_document_type
+from backend.services.information_extractor import (
+    extract_report_information,
+    extract_invoice_information,
+    extract_resume_information
+)
+
 
 class DocumentState(TypedDict, total=False):
 
@@ -55,15 +62,19 @@ class DocumentGraphWorkflow:
 
         print("[LangGraph] Classification Agent")
 
-        text = state.get(
+        raw_text = state.get(
             "extracted_text",
             ""
-        ).lower()
+        )
+        text = raw_text.lower()
+
+        detected = detect_document_type(raw_text)
 
         if (
             "employee" in text
             or "salary" in text
             or "department" in text
+            or detected == "Report"
         ):
 
             document_type = "Employee Report"
@@ -72,6 +83,7 @@ class DocumentGraphWorkflow:
             "invoice" in text
             or "total amount" in text
             or "invoice number" in text
+            or detected == "Invoice"
         ):
 
             document_type = "Invoice"
@@ -82,6 +94,16 @@ class DocumentGraphWorkflow:
         ):
 
             document_type = "Contract"
+
+        elif (
+            "resume" in text
+            or "curriculum vitae" in text
+            or "education" in text
+            or "work experience" in text
+            or detected == "Resume"
+        ):
+
+            document_type = "Resume"
 
         else:
 
@@ -147,6 +169,11 @@ class DocumentGraphWorkflow:
 
                 information["salary_data_found"] = True
 
+            parsed_report = extract_report_information(text)
+            for k, v in parsed_report.items():
+                if v:
+                    information[k] = v
+
 
         # Invoice
 
@@ -164,6 +191,11 @@ class DocumentGraphWorkflow:
 
                 information["total_amount_found"] = True
 
+            parsed_invoice = extract_invoice_information(text)
+            for k, v in parsed_invoice.items():
+                if v:
+                    information[k] = v
+
 
         # Contract
 
@@ -174,6 +206,20 @@ class DocumentGraphWorkflow:
             )
 
             information["contract_data_found"] = True
+
+
+        # Resume
+
+        elif document_type == "Resume":
+
+            information["category"] = (
+                "Personal Document"
+            )
+
+            parsed_resume = extract_resume_information(text)
+            for k, v in parsed_resume.items():
+                if v:
+                    information[k] = v
 
 
         # General
@@ -197,6 +243,7 @@ class DocumentGraphWorkflow:
             "agent_trace": trace
 
         }
+
 
 
     # =========================================================

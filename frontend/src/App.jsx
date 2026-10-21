@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 const API_URL = "http://127.0.0.1:8000";
@@ -9,7 +9,7 @@ const ALLOWED_TYPES = [
   "image/png",
 ];
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -26,9 +26,199 @@ function App() {
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [isLoadingDocument, setIsLoadingDocument] = useState(false);
 
+  // Authentication state
+  const [token, setToken] = useState(() => localStorage.getItem("docuai_token") || "");
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem("docuai_user");
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authFullName, setAuthFullName] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  // Document Q&A state
+  const [qaQuestion, setQaQuestion] = useState("");
+  const [isAsking, setIsAsking] = useState(false);
+  const [qaAnswer, setQaAnswer] = useState(null);
+  const [qaHistory, setQaHistory] = useState([]);
+  const [isLoadingQAHistory, setIsLoadingQAHistory] = useState(false);
+  const [qaError, setQaError] = useState("");
+
   useEffect(() => {
-    loadDocuments();
-  }, []);
+    if (token) {
+      loadDocuments();
+    } else {
+      setDocuments([]);
+    }
+  }, [token]);
+
+  function getAuthHeaders(hasBody = false) {
+    const headers = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    if (hasBody) {
+      headers["Content-Type"] = "application/json";
+    }
+    return headers;
+  }
+
+  function handleLogout() {
+    if (token) {
+      fetch(`${API_URL}/auth/logout`, {
+        method: "POST",
+        headers: getAuthHeaders(false),
+      }).catch(() => {});
+    }
+    localStorage.removeItem("docuai_token");
+    localStorage.removeItem("docuai_user");
+    setToken("");
+    setUser(null);
+    setDocuments([]);
+    setDocumentResult(null);
+    setSelectedDocument(null);
+    setQaHistory([]);
+    setQaAnswer(null);
+  }
+
+  async function handleAuthSubmit(e) {
+    e?.preventDefault();
+    setAuthLoading(true);
+    setAuthError("");
+
+    try {
+      const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
+      const payload = {
+        email: authEmail.trim(),
+        password: authPassword,
+      };
+      if (authMode === "register" && authFullName.trim()) {
+        payload.full_name = authFullName.trim();
+      }
+
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await readResponse(response);
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Authentication failed. Please verify your credentials.");
+      }
+
+      if (data.access_token) {
+        localStorage.setItem("docuai_token", data.access_token);
+        if (data.user) {
+          localStorage.setItem("docuai_user", JSON.stringify(data.user));
+          setUser(data.user);
+        }
+        setToken(data.access_token);
+        setShowAuthModal(false);
+        setAuthPassword("");
+        setErrorMessage("");
+      }
+    } catch (err) {
+      setAuthError(err.message || "Authentication error.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function loadQAHistory(documentId) {
+    if (!documentId || !token) {
+      setQaHistory([]);
+      return;
+    }
+    try {
+      setIsLoadingQAHistory(true);
+      const response = await fetch(`${API_URL}/documents/${documentId}/qa/history`, {
+        headers: getAuthHeaders(false),
+      });
+
+      if (response.status === 401) {
+        handleLogout();
+        setShowAuthModal(true);
+        return;
+      }
+      if (response.status === 403) {
+        setQaHistory([]);
+        return;
+      }
+
+      const data = await readResponse(response);
+      if (response.ok && data.history) {
+        setQaHistory(data.history);
+      }
+    } catch (err) {
+      console.warn("Could not load Q&A history:", err);
+    } finally {
+      setIsLoadingQAHistory(false);
+    }
+  }
+
+  async function handleAskQuestion(e, documentId) {
+    e?.preventDefault();
+    if (!token) {
+      setShowAuthModal(true);
+      setErrorMessage("Please sign in to query enterprise documents.");
+      return;
+    }
+    if (!qaQuestion.trim()) {
+      setQaError("Please enter a question.");
+      return;
+    }
+    if (!documentId) {
+      setQaError("No document selected.");
+      return;
+    }
+
+    try {
+      setIsAsking(true);
+      setQaError("");
+      setQaAnswer(null);
+
+      const response = await fetch(`${API_URL}/documents/${documentId}/qa`, {
+        method: "POST",
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ question: qaQuestion.trim() }),
+      });
+
+      if (response.status === 401) {
+        handleLogout();
+        setShowAuthModal(true);
+        throw new Error("Session expired. Please sign in again.");
+      }
+
+      if (response.status === 403) {
+        throw new Error("Access denied: You do not have permission to query this document.");
+      }
+
+      const data = await readResponse(response);
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Unable to retrieve question answer.");
+      }
+
+      setQaAnswer(data);
+      setQaQuestion("");
+      await loadQAHistory(documentId);
+    } catch (err) {
+      setQaError(err.message || "An error occurred during document question answering.");
+    } finally {
+      setIsAsking(false);
+    }
+  }
+
 
   /*
    * Safely read a backend response.
@@ -127,8 +317,21 @@ function App() {
    */
   async function fetchDocumentDetails(documentId) {
     const response = await fetch(
-      `${API_URL}/documents/${documentId}`
+      `${API_URL}/documents/${documentId}`,
+      {
+        headers: getAuthHeaders(false),
+      }
     );
+
+    if (response.status === 401) {
+      handleLogout();
+      setShowAuthModal(true);
+      throw new Error("Authentication required. Please sign in.");
+    }
+
+    if (response.status === 403) {
+      throw new Error("Access denied: You do not have permission to view this document.");
+    }
 
     const data = await readResponse(response);
 
@@ -145,13 +348,27 @@ function App() {
    * Load previously processed documents.
    */
   async function loadDocuments() {
+    if (!token) {
+      setDocuments([]);
+      return;
+    }
+
     try {
       setIsLoadingDocuments(true);
       setErrorMessage("");
 
       const response = await fetch(
-        `${API_URL}/documents`
+        `${API_URL}/documents`,
+        {
+          headers: getAuthHeaders(false),
+        }
       );
+
+      if (response.status === 401) {
+        handleLogout();
+        setShowAuthModal(true);
+        return;
+      }
 
       const data = await readResponse(response);
 
@@ -175,7 +392,7 @@ function App() {
       setDocuments([]);
 
       setErrorMessage(
-        `Unable to connect to the backend at ${API_URL}.`
+        error.message || `Unable to connect to the backend at ${API_URL}.`
       );
     } finally {
       setIsLoadingDocuments(false);
@@ -199,7 +416,7 @@ function App() {
 
     if (file.size > MAX_FILE_SIZE) {
       return (
-        "File is too large. Maximum allowed size is 20 MB."
+        "File is too large. Maximum allowed size is 10 MB."
       );
     }
 
@@ -241,6 +458,12 @@ function App() {
    * the complete extracted information.
    */
   async function handleUpload() {
+    if (!token) {
+      setErrorMessage("Please sign in or create an account to upload documents.");
+      setShowAuthModal(true);
+      return;
+    }
+
     if (!selectedFile) {
       setUploadStatus(
         "Please select a document first."
@@ -264,6 +487,9 @@ function App() {
       setErrorMessage("");
       setDocumentResult(null);
       setSelectedDocument(null);
+      setQaAnswer(null);
+      setQaHistory([]);
+      setQaError("");
 
       const formData = new FormData();
       formData.append("file", selectedFile);
@@ -272,9 +498,16 @@ function App() {
         `${API_URL}/upload`,
         {
           method: "POST",
+          headers: getAuthHeaders(false),
           body: formData,
         }
       );
+
+      if (response.status === 401) {
+        handleLogout();
+        setShowAuthModal(true);
+        throw new Error("Session expired. Please sign in again.");
+      }
 
       const data = await readResponse(response);
 
@@ -292,6 +525,7 @@ function App() {
       if (data.id) {
         completeDocument =
           await fetchDocumentDetails(data.id);
+        loadQAHistory(data.id);
       }
 
       setDocumentResult(completeDocument);
@@ -354,11 +588,15 @@ function App() {
       setIsLoadingDocument(true);
       setErrorMessage("");
       setSelectedDocument(null);
+      setQaAnswer(null);
+      setQaHistory([]);
+      setQaError("");
 
       const completeDocument =
         await fetchDocumentDetails(documentId);
 
       setSelectedDocument(completeDocument);
+      loadQAHistory(documentId);
 
       setTimeout(() => {
         const element =
@@ -658,8 +896,322 @@ function App() {
     );
   }
 
+  /*
+   * Render Document Q&A Panel with citations and history.
+   */
+  function renderQAPanel(doc) {
+    if (!doc || !doc.id) {
+      return null;
+    }
+
+    return (
+      <div className="qa-section" id={`qa-panel-${doc.id}`}>
+        <div className="qa-header">
+          <div className="qa-title-group">
+            <span className="qa-icon-badge">Q&A</span>
+            <div>
+              <h3>Document Intelligence Q&A</h3>
+              <p>
+                Ask questions about &ldquo;{doc.filename}&rdquo; grounded in extracted content
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Question form */}
+        <form
+          className="qa-form"
+          onSubmit={(e) => handleAskQuestion(e, doc.id)}
+        >
+          <input
+            type="text"
+            className="qa-input"
+            placeholder="Ask a question about this document (e.g. 'What is the total amount?')..."
+            value={qaQuestion}
+            onChange={(e) => setQaQuestion(e.target.value)}
+            disabled={isAsking}
+          />
+          <button
+            type="submit"
+            className="qa-submit-btn"
+            disabled={isAsking || !qaQuestion.trim()}
+          >
+            {isAsking ? "Analyzing..." : "Ask Document"}
+          </button>
+        </form>
+
+        {qaError && (
+          <div className="auth-error-banner" style={{ marginBottom: "16px" }}>
+            {qaError}
+          </div>
+        )}
+
+        {/* Latest Q&A Response */}
+        {qaAnswer && qaAnswer.document_id === doc.id && (
+          <div className="qa-result-box">
+            <div className="qa-result-header">
+              <span className="qa-question-display">
+                Q: {qaAnswer.question}
+              </span>
+              <span
+                className={`qa-evidence-pill ${
+                  qaAnswer.has_sufficient_evidence
+                    ? "supported"
+                    : "insufficient"
+                }`}
+              >
+                {qaAnswer.has_sufficient_evidence
+                  ? "✓ Evidence Grounded"
+                  : "⚠ Insufficient Evidence"}
+              </span>
+            </div>
+
+            <p className="qa-answer-text">{qaAnswer.answer}</p>
+
+            {/* Citations List */}
+            {Array.isArray(qaAnswer.citations) &&
+              qaAnswer.citations.length > 0 && (
+                <div className="qa-citations-section">
+                  <div className="qa-citations-heading">
+                    Supporting Citations & Evidence
+                  </div>
+                  {qaAnswer.citations.map((cite, index) => (
+                    <div className="qa-citation-card" key={index}>
+                      <p className="qa-citation-quote">
+                        &ldquo;{cite.quote}&rdquo;
+                      </p>
+                      <div className="qa-citation-meta">
+                        {cite.page_number && (
+                          <span className="qa-meta-chip page">
+                            Page {cite.page_number}
+                          </span>
+                        )}
+                        <span className="qa-meta-chip conf">
+                          {Math.round((cite.confidence || 1.0) * 100)}% Match Confidence
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+          </div>
+        )}
+
+        {/* Q&A Conversation History */}
+        {qaHistory.length > 0 && (
+          <div className="qa-history-container" style={{ marginTop: "20px" }}>
+            <h4
+              style={{
+                fontSize: "13px",
+                color: "#94a3b8",
+                marginBottom: "12px",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+              }}
+            >
+              Conversation History ({qaHistory.length})
+            </h4>
+
+            {qaHistory.map((turn) => (
+              <div className="qa-history-card" key={turn.id}>
+                <div className="qa-history-q">
+                  <span className="qa-history-badge-q">Q</span>
+                  <strong>{turn.question}</strong>
+                </div>
+
+                <p className="qa-history-a">{turn.answer}</p>
+
+                {Array.isArray(turn.citations) && turn.citations.length > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      marginTop: "8px",
+                      paddingLeft: "24px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {turn.citations.map((c, i) => (
+                      <span
+                        key={i}
+                        className="qa-meta-chip page"
+                        style={{ fontSize: "10px" }}
+                      >
+                        {c.page_number ? `Page ${c.page_number}` : "Evidence cited"}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <main className="docuai-app">
+
+      {/* TOP NAVIGATION & ENTERPRISE AUTH BAR */}
+      <header className="top-nav">
+        <div className="nav-brand">
+          <span className="nav-logo-badge">DocuAI</span>
+          <span className="nav-title">Enterprise Platform</span>
+        </div>
+
+        <div className="nav-auth">
+          {token && user ? (
+            <div className="user-profile-badge">
+              <div className="user-avatar">
+                {(user.full_name || user.email || "U")[0].toUpperCase()}
+              </div>
+              <span className="user-name">
+                {user.full_name || user.email}
+              </span>
+              <button
+                type="button"
+                className="logout-nav-btn"
+                onClick={handleLogout}
+                title="Log out of DocuAI"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                type="button"
+                className="auth-nav-btn secondary"
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                className="auth-nav-btn primary"
+                onClick={() => {
+                  setAuthMode("register");
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+              >
+                Create Account
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* AUTHENTICATION MODAL */}
+      {showAuthModal && (
+        <div className="auth-overlay" onClick={() => setShowAuthModal(false)}>
+          <div className="auth-card" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="auth-close-btn"
+              onClick={() => setShowAuthModal(false)}
+            >
+              ×
+            </button>
+
+            <div className="auth-header">
+              <h2>{authMode === "login" ? "Enterprise Login" : "Create Account"}</h2>
+              <p>
+                {authMode === "login"
+                  ? "Access your secured multimodal document intelligence repository"
+                  : "Register a new enterprise user account to start analyzing documents"}
+              </p>
+            </div>
+
+            <div className="auth-tabs">
+              <button
+                type="button"
+                className={`auth-tab ${authMode === "login" ? "active" : ""}`}
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthError("");
+                }}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                className={`auth-tab ${authMode === "register" ? "active" : ""}`}
+                onClick={() => {
+                  setAuthMode("register");
+                  setAuthError("");
+                }}
+              >
+                Register
+              </button>
+            </div>
+
+            {authError && (
+              <div className="auth-error-banner" style={{ marginBottom: "16px" }}>
+                {authError}
+              </div>
+            )}
+
+            <form className="auth-form" onSubmit={handleAuthSubmit}>
+              {authMode === "register" && (
+                <div className="auth-field">
+                  <label htmlFor="auth-full-name">Full Name</label>
+                  <input
+                    id="auth-full-name"
+                    type="text"
+                    placeholder="Jane Doe"
+                    value={authFullName}
+                    onChange={(e) => setAuthFullName(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="auth-field">
+                <label htmlFor="auth-email">Email Address</label>
+                <input
+                  id="auth-email"
+                  type="email"
+                  placeholder="employee@enterprise.com"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="auth-field">
+                <label htmlFor="auth-password">Password</label>
+                <input
+                  id="auth-password"
+                  type="password"
+                  placeholder="•••••••• (min. 8 characters)"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="auth-submit-btn"
+                disabled={authLoading}
+              >
+                {authLoading
+                  ? "Authenticating..."
+                  : authMode === "login"
+                  ? "Sign In"
+                  : "Register Account"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* HERO */}
 
@@ -737,6 +1289,25 @@ function App() {
 
         </div>
 
+        {!token && (
+          <div className="auth-notice-card">
+            <h3>Enterprise Authentication Required</h3>
+            <p>
+              Please sign in or create an account to upload documents, access your private document repository, and query documents with grounded AI citations.
+            </p>
+            <button
+              type="button"
+              className="auth-nav-btn primary"
+              onClick={() => {
+                setAuthMode("login");
+                setAuthError("");
+                setShowAuthModal(true);
+              }}
+            >
+              Sign In to Get Started
+            </button>
+          </div>
+        )}
 
         <div className="upload-card">
 
@@ -1108,6 +1679,8 @@ function App() {
               </div>
             )}
 
+            {renderQAPanel(documentResult)}
+
           </div>
 
         </section>
@@ -1140,7 +1713,27 @@ function App() {
 
         <div className="history-container">
 
-          {isLoadingDocuments ? (
+          {!token ? (
+            <div className="history-empty">
+              <div className="empty-document-icon">
+                AUTH
+              </div>
+              <h3>Sign in to view your documents</h3>
+              <p>Your document repository is protected by multi-tenant enterprise encryption.</p>
+              <button
+                type="button"
+                className="auth-nav-btn primary"
+                style={{ marginTop: "12px" }}
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+              >
+                Sign In
+              </button>
+            </div>
+          ) : isLoadingDocuments ? (
             <p className="upload-status">
               Loading document history...
             </p>
@@ -1469,6 +2062,8 @@ function App() {
 
                 </div>
               )}
+
+            {renderQAPanel(selectedDocument)}
 
           </div>
 
