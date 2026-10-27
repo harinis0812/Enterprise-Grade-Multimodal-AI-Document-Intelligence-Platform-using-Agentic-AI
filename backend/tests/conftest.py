@@ -1,3 +1,13 @@
+import os
+import tempfile
+from pathlib import Path
+
+# Ensure cache dirs use writable workspace / temp directory
+_paddlex_dir = Path(__file__).resolve().parent.parent.parent / ".paddlex"
+_paddlex_dir.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("PADDLE_PDX_CACHE_HOME", str(_paddlex_dir))
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -49,4 +59,3 @@ def apply_auth_headers_per_test(setup_test_environment):
     for mod_name in ["backend.tests.test_document", "test_document"]:
         if mod_name in sys.modules and hasattr(sys.modules[mod_name], "client"):
             sys.modules[mod_name].client.headers["Authorization"] = f"Bearer {token}"
-
