@@ -19,8 +19,19 @@ export default function DashboardView({
   onAskDocument
 }) {
   const totalDocs = documents.length;
-  const processedDocs = documents.filter((d) => d.status === "processed").length;
-  const reviewDocs = documents.filter((d) => d.status && d.status !== "processed").length;
+  const processedDocs = documents.filter((d) => {
+    const s = (d.status || "").toLowerCase();
+    return s === "verified" || s === "processed";
+  }).length;
+  const reviewDocs = documents.filter((d) => {
+    const s = (d.status || "").toLowerCase();
+    return (
+      s === "needs_review" ||
+      s === "failed" ||
+      s === "error" ||
+      (s && s !== "verified" && s !== "processed")
+    );
+  }).length;
   const recentDocs = documents.slice(0, 5);
 
   const displayName = user?.full_name || (user?.email ? user.email.split("@")[0] : null);
@@ -190,7 +201,8 @@ export default function DashboardView({
                     </div>
 
                     <div className="doc-status-col">
-                      <span className={`status-pill pill-${doc.status || "processed"}`}>
+                      <span className={`status-pill pill-${(doc.status || "processed").toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+                        {(doc.status === "processed" || doc.status === "verified") && <IconCheckCircle size={12} />}
                         {doc.status || "Processed"}
                       </span>
                     </div>

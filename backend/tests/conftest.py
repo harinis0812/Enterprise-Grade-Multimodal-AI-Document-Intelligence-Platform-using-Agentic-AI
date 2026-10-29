@@ -59,3 +59,26 @@ def apply_auth_headers_per_test(setup_test_environment):
     for mod_name in ["backend.tests.test_document", "test_document"]:
         if mod_name in sys.modules and hasattr(sys.modules[mod_name], "client"):
             sys.modules[mod_name].client.headers["Authorization"] = f"Bearer {token}"
+
+
+@pytest.fixture(autouse=True)
+def mock_ocr_service_for_fast_tests(monkeypatch):
+    """
+    Prevents heavy on-the-fly PaddleOCR CPU model weight downloads/initializations
+    during test runs while preserving end-to-end routing and document workflows.
+    """
+    def mock_extract(file_path):
+        return "Employee Report Harini Department AI ML Total Amount $5000"
+
+    monkeypatch.setattr(
+        "backend.services.ocr_service.extract_text_from_image",
+        mock_extract
+    )
+    monkeypatch.setattr(
+        "backend.services.pdf_service.extract_text_from_image",
+        mock_extract
+    )
+    monkeypatch.setattr(
+        "backend.api.document.extract_text_from_image",
+        mock_extract
+    )

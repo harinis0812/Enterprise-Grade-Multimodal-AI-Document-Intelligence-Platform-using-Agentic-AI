@@ -40,16 +40,28 @@ export default function AskView({
 
   const activeDoc = documents.find((d) => String(d.id) === String(selectedDocId));
 
+  // Check if latest answer is already represented in qaHistory to prevent duplicate rendering
+  const isAnswerInHistory = Boolean(
+    qaAnswer &&
+    qaHistory.some(
+      (item) =>
+        item.question?.trim().toLowerCase() === qaAnswer.question?.trim().toLowerCase() &&
+        item.answer?.trim() === qaAnswer.answer?.trim()
+    )
+  );
+
   function handleSubmit(e) {
     e?.preventDefault();
+    if (isAsking) return;
     if (!token) {
       onOpenAuth("login");
       return;
     }
     if (!selectedDocId) return;
-    if (!question.trim()) return;
+    const trimmed = question.trim();
+    if (!trimmed) return;
 
-    onAskQuestion(selectedDocId, question.trim());
+    onAskQuestion(selectedDocId, trimmed);
     setQuestion("");
   }
 
@@ -217,7 +229,7 @@ export default function AskView({
                                       </span>
                                     )}
                                     <span className="citation-match-badge">
-                                      {Math.round((cite.confidence || 1.0) * 100)}% Match
+                                      {Math.round((cite.confidence || 0) * 100)}% Match
                                     </span>
                                   </div>
                                 </div>
@@ -230,8 +242,8 @@ export default function AskView({
                   </div>
                 ))}
 
-                {/* Latest Question/Answer Turn (if not yet in history or newly returned) */}
-                {qaAnswer && String(qaAnswer.document_id) === String(selectedDocId) && (
+                {/* Latest Question/Answer Turn (only displayed if not already merged in history) */}
+                {qaAnswer && !isAnswerInHistory && String(qaAnswer.document_id) === String(selectedDocId) && (
                   <div className="qa-turn-container new-turn">
                     <div className="qa-user-bubble-row">
                       <div className="user-avatar-tag">You</div>
@@ -282,7 +294,7 @@ export default function AskView({
                                       </span>
                                     )}
                                     <span className="citation-match-badge">
-                                      {Math.round((cite.confidence || 1.0) * 100)}% Match
+                                      {Math.round((cite.confidence || 0) * 100)}% Match
                                     </span>
                                   </div>
                                 </div>

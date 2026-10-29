@@ -814,19 +814,19 @@
   text-transform: capitalize;
 }
 
-.pill-processed {
+.pill-processed, .pill-verified {
   background: var(--color-success-bg);
   color: var(--color-success);
   border: 1px solid var(--color-success-border);
 }
 
-.pill-needs_review, .pill-pending {
+.pill-needs_review, .pill-needs-review, .pill-pending {
   background: var(--color-warning-bg);
   color: var(--color-warning);
   border: 1px solid var(--color-warning-border);
 }
 
-.pill-failed {
+.pill-failed, .pill-error {
   background: var(--color-danger-bg);
   color: var(--color-danger);
   border: 1px solid var(--color-danger-border);
@@ -1499,9 +1499,22 @@
   border-radius: var(--radius-full);
 }
 
-.active-doc-status-pill.status-processed {
+.active-doc-status-pill.status-processed,
+.active-doc-status-pill.status-verified {
   background: #d1fae5;
   color: #065f46;
+}
+
+.active-doc-status-pill.status-needs_review,
+.active-doc-status-pill.status-needs-review {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.active-doc-status-pill.status-failed,
+.active-doc-status-pill.status-error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 
 .qa-workspace-container {
@@ -2688,9 +2701,22 @@
   gap: 4px;
 }
 
-.doc-modal-status-badge.status-processed {
+.doc-modal-status-badge.status-processed,
+.doc-modal-status-badge.status-verified {
   background: #d1fae5;
   color: #065f46;
+}
+
+.doc-modal-status-badge.status-needs_review,
+.doc-modal-status-badge.status-needs-review {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.doc-modal-status-badge.status-failed,
+.doc-modal-status-badge.status-error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 
 .doc-modal-id {

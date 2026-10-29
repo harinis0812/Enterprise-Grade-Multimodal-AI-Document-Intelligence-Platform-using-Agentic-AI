@@ -233,14 +233,15 @@ export default function App() {
       setAuthModalOpen(true);
       return;
     }
+    if (isAsking) return;
     try {
       setIsAsking(true);
       setQaError("");
       setQaAnswer(null);
 
       const res = await api.askDocumentQuestion(docId, questionText, token);
-      setQaAnswer(res);
       await refreshQAHistory(docId);
+      setQaAnswer(res);
     } catch (err) {
       setQaError(err.message || "Failed to generate answer for this document.");
     } finally {

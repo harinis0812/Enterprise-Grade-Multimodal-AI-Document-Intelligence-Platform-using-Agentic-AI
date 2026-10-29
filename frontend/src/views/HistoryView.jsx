@@ -50,8 +50,19 @@ export default function HistoryView({
         }
 
         // Status filter
-        if (selectedStatusFilter !== "all" && doc.status !== selectedStatusFilter) {
-          return false;
+        if (selectedStatusFilter !== "all") {
+          const docStatus = (doc.status || "").toLowerCase();
+          if (selectedStatusFilter === "verified") {
+            if (docStatus !== "verified") return false;
+          } else if (selectedStatusFilter === "processed") {
+            if (docStatus !== "processed" && docStatus !== "verified") return false;
+          } else if (selectedStatusFilter === "needs_review") {
+            if (docStatus !== "needs_review") return false;
+          } else if (selectedStatusFilter === "failed") {
+            if (docStatus !== "failed" && docStatus !== "error") return false;
+          } else if (docStatus !== selectedStatusFilter.toLowerCase()) {
+            return false;
+          }
         }
 
         return true;
@@ -175,9 +186,11 @@ export default function HistoryView({
                 value={selectedStatusFilter}
                 onChange={(e) => setSelectedStatusFilter(e.target.value)}
               >
-                <option value="all">All Statuses</option>
-                <option value="processed">Processed</option>
-                <option value="needs_review">Needs Review</option>
+                <option value="all">All Statuses ({documents.length})</option>
+                <option value="verified">Verified ({documents.filter((d) => (d.status || "").toLowerCase() === "verified").length})</option>
+                <option value="processed">Processed ({documents.filter((d) => ["verified", "processed"].includes((d.status || "").toLowerCase())).length})</option>
+                <option value="needs_review">Needs Review ({documents.filter((d) => (d.status || "").toLowerCase() === "needs_review").length})</option>
+                <option value="failed">Failed / Error ({documents.filter((d) => ["failed", "error"].includes((d.status || "").toLowerCase())).length})</option>
               </select>
             </div>
 
@@ -255,8 +268,8 @@ export default function HistoryView({
                       </td>
 
                       <td>
-                        <span className={`status-pill pill-${doc.status || "processed"}`}>
-                          {doc.status === "processed" && <IconCheckCircle size={12} />}
+                        <span className={`status-pill pill-${(doc.status || "processed").toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+                          {["processed", "verified"].includes((doc.status || "").toLowerCase()) && <IconCheckCircle size={12} />}
                           {doc.status || "Processed"}
                         </span>
                       </td>

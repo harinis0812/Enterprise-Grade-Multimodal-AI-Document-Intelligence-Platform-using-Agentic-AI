@@ -63,8 +63,8 @@ export default function DocumentDetailModal({
             <div className="doc-modal-info">
               <div className="doc-modal-meta-row">
                 <span className="doc-modal-type-badge">{document.document_type || "Document"}</span>
-                <span className={`doc-modal-status-badge status-${document.status || "processed"}`}>
-                  {document.status === "processed" && <IconCheckCircle size={13} />}
+                <span className={`doc-modal-status-badge status-${(document.status || "processed").toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+                  {["processed", "verified"].includes((document.status || "").toLowerCase()) && <IconCheckCircle size={13} />}
                   {document.status || "Processed"}
                 </span>
                 <span className="doc-modal-id">ID: #{document.id}</span>

@@ -209,3 +209,60 @@ def test_audit_logs_contain_no_passwords_or_tokens():
         details_str = str(log.details or "").lower()
         assert "password123" not in details_str
         assert "bearer " not in details_str
+
+
+def test_audit_logs_multi_tenant_isolation():
+    """
+    Ensure users can only view their own audit logs, not other tenants' activity.
+    """
+    # Create User A
+    user_a_email = "audit_user_a@enterprise.com"
+    res_a = client.post("/auth/register", json={"email": user_a_email, "password": "UserAPassword123!", "full_name": "Audit A"})
+    token_a = res_a.json()["access_token"] if res_a.status_code == 201 else client.post("/auth/login", json={"email": user_a_email, "password": "UserAPassword123!"}).json()["access_token"]
+
+    # Create User B
+    user_b_email = "audit_user_b@enterprise.com"
+    res_b = client.post("/auth/register", json={"email": user_b_email, "password": "UserBPassword123!", "full_name": "Audit B"})
+    token_b = res_b.json()["access_token"] if res_b.status_code == 201 else client.post("/auth/login", json={"email": user_b_email, "password": "UserBPassword123!"}).json()["access_token"]
+
+    client_a = TestClient(app)
+    client_a.headers["Authorization"] = f"Bearer {token_a}"
+
+    client_b = TestClient(app)
+    client_b.headers["Authorization"] = f"Bearer {token_b}"
+
+    # Query audit logs
+    logs_b = client_b.get("/audit-logs").json()
+    assert "logs" in logs_b
+    # Verify no User A email or private events in User B logs
+    for entry in logs_b["logs"]:
+        assert user_a_email not in str(entry.get("details", ""))
+
+
+def test_protected_endpoints_strictly_require_bearer_auth():
+    """
+    Verify complete authorization enforcement across all protected endpoints.
+    """
+    unauth = TestClient(app)
+
+    # 1. Documents listing
+    assert unauth.get("/documents").status_code == 401
+
+    # 2. Upload endpoint
+    assert unauth.post("/upload", files={"file": ("test.pdf", b"%PDF-1.4 test", "application/pdf")}).status_code == 401
+
+    # 3. Document inspection
+    assert unauth.get("/documents/1").status_code == 401
+
+    # 4. Document Q&A
+    assert unauth.post("/documents/1/qa", json={"question": "Test?"}).status_code == 401
+
+    # 5. Document Q&A history
+    assert unauth.get("/documents/1/qa/history").status_code == 401
+
+    # 6. Audit logs
+    assert unauth.get("/audit-logs").status_code == 401
+
+    # 7. Authenticated user profile
+    assert unauth.get("/auth/me").status_code == 401
+

@@ -52,6 +52,138 @@ def test_qa_service_unit_empty_document():
     assert "empty" in answer.lower()
 
 
+def test_qa_service_unit_summary_query():
+    doc_text = (
+        "--- Page 1 ---\n"
+        "Global Enterprise Strategy 2026.\n"
+        "This strategic initiative focuses on digital transformation and agentic AI integration.\n"
+        "The project aims to achieve 99.4 percent accuracy across document verification pipelines.\n"
+    )
+    qa = DocumentQAService()
+    answer, citations, has_evidence = qa.answer_question(
+        doc_text,
+        "Provide a concise summary of the key findings in this document."
+    )
+
+    assert has_evidence is True
+    assert len(citations) >= 1
+    assert citations[0]["page_number"] == 1
+    assert "summary" in answer.lower()
+    assert "digital transformation" in answer.lower() or "accuracy" in answer.lower()
+
+
+def test_qa_service_unit_financial_query_extracts_concrete_value():
+    doc_text = (
+        "--- Page 1 ---\n"
+        "Procurement and Billing Specification.\n"
+        "The report should extract the currency, each category, each amount, and the total.\n\n"
+        "--- Page 2 ---\n"
+        "Invoice Breakdown and Final Charges.\n"
+        "Category A Hardware: $42,500.\n"
+        "Total billing amount finalized at $128,750 USD.\n"
+    )
+    qa = DocumentQAService()
+    answer, citations, has_evidence = qa.answer_question(
+        doc_text,
+        "What is the total amount or financial value mentioned?"
+    )
+
+    assert has_evidence is True
+    assert len(citations) >= 1
+    # Ensure it extracted the concrete monetary value, NOT the instruction sentence
+    assert "$128,750" in answer or "$128,750" in citations[0]["quote"]
+    assert "the report should extract" not in answer.lower()
+    assert citations[0]["page_number"] == 2
+
+
+def test_qa_service_unit_financial_query_no_values():
+    doc_text = (
+        "--- Page 1 ---\n"
+        "Employee Code of Conduct and Work Ethics.\n"
+        "All staff members must wear formal identification badges.\n"
+    )
+    qa = DocumentQAService()
+    answer, citations, has_evidence = qa.answer_question(
+        doc_text,
+        "What is the total amount or financial value mentioned?"
+    )
+
+    assert has_evidence is False
+    assert len(citations) == 0
+    assert "not contain" in answer.lower() or "not mention" in answer.lower()
+
+
+def test_qa_service_unit_data_quality_framework_overview():
+    doc_text = (
+        "--- Page 1 ---\n"
+        "DocuAI Enterprise Multimodal Platform Architecture Overview.\n"
+        "This platform orchestrates autonomous LangGraph agent workflows for enterprise intelligence.\n\n"
+        "--- Page 15 ---\n"
+        "Security, Access Control, and Authentication Protocol.\n"
+        "Multi-tenant isolation is strictly enforced via JWT bearer tokens and tenant foreign keys.\n\n"
+        "--- Page 29 ---\n"
+        "Data Quality Framework Reference: NES-DOC-TEST-030 Section: Data Quality Framework Overview.\n"
+        "The quality framework measures completeness, validity, consistency, uniqueness, timeliness, and traceability.\n"
+        "Completeness asks whether required fields are present. Validity checks whether values meet allowed formats.\n"
+        "Consistency compares related fields. Uniqueness identifies duplicate records.\n"
+    )
+    qa = DocumentQAService()
+    answer, citations, has_evidence = qa.answer_question(
+        doc_text,
+        "overview of data quality framework"
+    )
+
+    assert has_evidence is True
+    assert len(citations) >= 1
+    # MUST locate the actual Data Quality Framework section on Page 29, NEVER Page 1
+    assert citations[0]["page_number"] == 29
+    assert "completeness" in answer.lower()
+    assert "validity" in answer.lower()
+    assert "traceability" in answer.lower()
+    # Honest match score should not be artificially clamped to a fake 0.95
+    assert 0.0 < citations[0]["confidence"] <= 1.0
+
+
+def test_qa_service_unit_distinct_questions_return_distinct_pages_and_evidence():
+    doc_text = (
+        "--- Page 1 ---\n"
+        "Acme Enterprise Annual Report.\n"
+        "Fiscal Year 2026 total revenue reached $150 million.\n\n"
+        "--- Page 7 ---\n"
+        "Human Resources and Key Executive Personnel.\n"
+        "The Chief Technology Officer is Dr. Jane Smith.\n\n"
+        "--- Page 14 ---\n"
+        "Global Facilities and Real Estate.\n"
+        "The primary engineering headquarters is located in Austin, Texas.\n"
+    )
+    qa = DocumentQAService()
+
+    # Query 1: Revenue
+    ans1, cite1, ev1 = qa.answer_question(doc_text, "What was the total enterprise revenue?")
+    assert ev1 is True
+    assert cite1[0]["page_number"] == 1
+    assert "$150 million" in ans1 or "$150 million" in cite1[0]["quote"]
+
+    # Query 2: Executive
+    ans2, cite2, ev2 = qa.answer_question(doc_text, "Who is the Chief Technology Officer?")
+    assert ev2 is True
+    assert cite2[0]["page_number"] == 7
+    assert "Jane Smith" in ans2 or "Jane Smith" in cite2[0]["quote"]
+
+    # Query 3: Headquarters
+    ans3, cite3, ev3 = qa.answer_question(doc_text, "Where is the engineering headquarters located?")
+    assert ev3 is True
+    assert cite3[0]["page_number"] == 14
+    assert "Austin" in ans3 or "Austin" in cite3[0]["quote"]
+
+    # Query 4: Unrelated query -> Insufficient evidence
+    ans4, cite4, ev4 = qa.answer_question(doc_text, "What is the recipe for chocolate cake?")
+    assert ev4 is False
+    assert len(cite4) == 0
+    assert "not contain enough evidence" in ans4.lower()
+
+
+
 def test_document_qa_api_end_to_end_and_isolation():
     """
     Test complete lifecycle:
