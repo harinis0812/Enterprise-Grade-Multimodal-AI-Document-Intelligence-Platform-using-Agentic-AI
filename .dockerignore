@@ -1,6 +1,44 @@
-venv/
-__pycache__/
-*.pyc
+# Git & CI/CD
 .git/
-.env
+.github/
+
+# Virtual Environments
+venv/
+env/
+.venv/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local database & state (prevents database leakage)
+*.db
+*.sqlite
+*.sqlite3
+docuai.db
+
+# MLOps & model cache
+mlruns/
+.paddlex/
+
+# Uploaded documents
 uploads/*
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Frontend build artifacts & dependencies
+frontend/node_modules/
+frontend/dist/
+
+# Environment files with secrets
+.env*
+!.env.example
+
+# Local temporary files & logs
+*.log
+test.jpeg
+startup-probe-patch.json

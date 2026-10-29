@@ -1,10 +1,43 @@
+# Virtual Environments
 venv/
+env/
+.venv/
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-.env
-backend/uploads/*
-test.jpeg
+*.py[cod]
+*$py.class
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment Variables & Secrets
+.env*
+!.env.example
+
+# Local SQLite Database & Storage
+docuai.db
+*.db
+*.sqlite
+*.sqlite3
 backend/database/*.db
 
-docuai.db
+# MLOps & Model Caches
 mlruns/
+.paddlex/
+
+# User Uploaded Documents
+uploads/*
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Frontend Dependencies and Build Outputs
+frontend/node_modules/
+frontend/dist/
+
+# Logs & Temporary Files
+*.log
+test.jpeg
+startup-probe-patch.json

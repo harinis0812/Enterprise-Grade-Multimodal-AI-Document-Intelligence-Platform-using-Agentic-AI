@@ -10,11 +10,11 @@ on:
 
 jobs:
 
-  test:
+  backend-test:
+    name: Backend Tests
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -22,25 +22,55 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+
+      - name: Install system dependencies for OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest httpx
 
-      - name: Run tests
+      - name: Run backend tests
         run: |
           python -m pytest backend/tests -v
         env:
           PYTHONPATH: .
+          DATABASE_URL: sqlite:///./ci_test.db
+          JWT_SECRET_KEY: ci-test-secret-key-for-workflow-32bytes
 
-  docker:
-    needs: test
+  frontend-build:
+    name: Frontend Build Check
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build frontend production bundle
+        run: npm run build
+        working-directory: frontend
+
+  docker:
+    name: Docker Build & Verification
+    needs: [backend-test, frontend-build]
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
