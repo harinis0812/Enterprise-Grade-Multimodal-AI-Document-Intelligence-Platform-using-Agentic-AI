@@ -12,6 +12,8 @@ spec:
       labels:
         app: docuai-backend
     spec:
+      imagePullSecrets:
+        - name: docuai-registry-secret
       containers:
         - name: docuai-backend
           image: docuai-backend:v2

@@ -81,3 +81,243 @@ jobs:
       - name: Verify Docker image
         run: |
           docker images docuai-backend
+
+  deploy:
+    name: Continuous Deployment (CD)
+    needs: [backend-test, frontend-build, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up Kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.30.0"
+
+      - name: Inspect Deployment Configuration & Secrets
+        id: deploy-config
+        env:
+          KUBECONFIG_SECRET: ${{ secrets.KUBECONFIG }}
+          DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASS: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          GHCR_TAGS="ghcr.io/${REPO_LOWER}:latest,ghcr.io/${REPO_LOWER}:${SHORT_SHA},ghcr.io/${REPO_LOWER}:${{ github.sha }}"
+          ALL_TAGS="${GHCR_TAGS}"
+          DEPLOY_IMG="ghcr.io/${REPO_LOWER}:${SHORT_SHA}"
+
+          if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_PASS" ]; then
+            DOCKERHUB_USER_LOWER=$(echo "$DOCKERHUB_USER" | tr '[:upper:]' '[:lower:]')
+            DOCKERHUB_TAGS="${DOCKERHUB_USER_LOWER}/docuai-backend:latest,${DOCKERHUB_USER_LOWER}/docuai-backend:${SHORT_SHA}"
+            ALL_TAGS="${ALL_TAGS},${DOCKERHUB_TAGS}"
+            DEPLOY_IMG="${DOCKERHUB_USER_LOWER}/docuai-backend:${SHORT_SHA}"
+            echo "dockerhub_enabled=true" >> $GITHUB_OUTPUT
+          else
+            echo "dockerhub_enabled=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ -n "$KUBECONFIG_SECRET" ]; then
+            echo "k8s_enabled=true" >> $GITHUB_OUTPUT
+          else
+            echo "k8s_enabled=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "tags=${ALL_TAGS}" >> $GITHUB_OUTPUT
+          echo "deploy_image=${DEPLOY_IMG}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "ghcr_repo=ghcr.io/${REPO_LOWER}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub (Optional)
+        if: steps.deploy-config.outputs.dockerhub_enabled == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Container Image
+        id: image-push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.deploy-config.outputs.tags }}
+
+      - name: Validate Kubernetes Manifests YAML Syntax
+        id: manifest-validate
+        run: |
+          python3 -m pip install --quiet --upgrade pip pyyaml
+          python3 -c "
+          import sys, yaml
+          manifests = [
+              'k8s/postgres-pvc.yaml',
+              'k8s/postgres-service.yaml',
+              'k8s/postgres-deployment.yaml',
+              'k8s/service.yaml',
+              'k8s/deployment.yaml'
+          ]
+          for m in manifests:
+              try:
+                  with open(m, 'r') as f:
+                      docs = list(yaml.safe_load_all(f))
+                      assert len(docs) > 0, f'No documents found in {m}'
+                  print(f'[OK] Valid YAML syntax: {m}')
+              except Exception as e:
+                  print(f'[ERROR] YAML syntax validation failed for {m}: {e}', file=sys.stderr)
+                  sys.exit(1)
+          "
+
+      - name: Deploy to Kubernetes Cluster
+        id: k8s-deploy
+        if: steps.deploy-config.outputs.k8s_enabled == 'true'
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+          TARGET_IMAGE: ${{ steps.deploy-config.outputs.deploy_image }}
+          K8S_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          K8S_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          K8S_JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          K8S_GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          K8S_GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          DOCKERHUB_ENABLED: ${{ steps.deploy-config.outputs.dockerhub_enabled }}
+          DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASS: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          # 1. Require secure production credentials for live deployment (no hardcoded fallbacks)
+          if [ -z "$K8S_POSTGRES_PASSWORD" ] || [ -z "$K8S_DATABASE_URL" ] || [ -z "$K8S_JWT_SECRET_KEY" ]; then
+            echo "::error::Live Kubernetes deployment requires POSTGRES_PASSWORD, DATABASE_URL, and JWT_SECRET_KEY secrets to be configured in GitHub Secrets."
+            echo "::error::Insecure fallback passwords and default keys have been removed. Deployment aborted."
+            exit 1
+          fi
+
+          echo "Configuring Kubeconfig..."
+          mkdir -p $HOME/.kube
+          echo "$KUBECONFIG_DATA" | base64 -d > $HOME/.kube/config 2>/dev/null || echo "$KUBECONFIG_DATA" > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+          # 2. Configure private registry image-pull authentication with verified credentials
+          if [ "$DOCKERHUB_ENABLED" = "true" ]; then
+            echo "Configuring Docker Hub image-pull credentials in cluster..."
+            kubectl create secret docker-registry docuai-registry-secret \
+              --docker-server=https://index.docker.io/v1/ \
+              --docker-username="$DOCKERHUB_USER" \
+              --docker-password="$DOCKERHUB_PASS" \
+              --dry-run=client -o yaml | kubectl apply -f -
+          else
+            echo "Configuring GHCR image-pull credentials with dedicated GHCR_PULL_TOKEN..."
+            # Strictly require both GHCR_USERNAME and GHCR_PULL_TOKEN (avoiding unreliable fallbacks)
+            if [ -z "$K8S_GHCR_USERNAME" ] || [ -z "$K8S_GHCR_PULL_TOKEN" ]; then
+              echo "::error::Live Kubernetes deployment pulling from GHCR requires both GHCR_USERNAME (the account owning the PAT) and GHCR_PULL_TOKEN (PAT with read:packages permission) in GitHub Secrets."
+              echo "::error::Unreliable fallbacks are prohibited to ensure the Kubernetes cluster retains valid image-pull credentials."
+              exit 1
+            fi
+            kubectl create secret docker-registry docuai-registry-secret \
+              --docker-server=ghcr.io \
+              --docker-username="$K8S_GHCR_USERNAME" \
+              --docker-password="$K8S_GHCR_PULL_TOKEN" \
+              --docker-email="${K8S_GHCR_USERNAME}@users.noreply.github.com" \
+              --dry-run=client -o yaml | kubectl apply -f -
+          fi
+
+          # Attach imagePullSecrets to default ServiceAccount as a safeguard
+          kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "docuai-registry-secret"}]}'
+
+          # 3. Safely create or update application secrets idempotently
+          echo "Creating or updating docuai-secrets in cluster..."
+          kubectl create secret generic docuai-secrets \
+            --from-literal=POSTGRES_DB="docuai" \
+            --from-literal=POSTGRES_USER="docuai" \
+            --from-literal=POSTGRES_PASSWORD="$K8S_POSTGRES_PASSWORD" \
+            --from-literal=DATABASE_URL="$K8S_DATABASE_URL" \
+            --from-literal=JWT_SECRET_KEY="$K8S_JWT_SECRET_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # 4. Apply storage, services, and deployments
+          echo "Applying Kubernetes manifests..."
+          kubectl apply -f k8s/postgres-pvc.yaml
+          kubectl apply -f k8s/postgres-service.yaml
+          kubectl apply -f k8s/postgres-deployment.yaml
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/deployment.yaml
+
+          # 5. Update backend deployment image to newly built release tag
+          # Matches Deployment name 'docuai-backend' and container name 'docuai-backend' in k8s/deployment.yaml
+          echo "Updating deployment image to ${TARGET_IMAGE}..."
+          kubectl set image deployment/docuai-backend docuai-backend="${TARGET_IMAGE}"
+
+          # 6. Verify rollout status
+          echo "Monitoring rollout status..."
+          kubectl rollout status deployment/docuai-backend --timeout=180s
+          echo "Kubernetes deployment rolled out successfully."
+
+      - name: Continuous Deployment Status Summary
+        if: always()
+        run: |
+          echo "=========================================================="
+          echo "         DocuAI Continuous Deployment (CD) Summary        "
+          echo "=========================================================="
+          echo "Branch: ${{ github.ref_name }} | Commit: ${{ steps.deploy-config.outputs.short_sha }}"
+          echo ""
+
+          # 1. Container Image Publication
+          if [ "${{ steps.image-push.outcome }}" = "success" ]; then
+            echo "1. Container Image Publication: SUCCESSFUL"
+            echo "   - Released Tag: ${{ steps.deploy-config.outputs.deploy_image }}"
+            echo "   - GHCR Image: ${{ steps.deploy-config.outputs.ghcr_repo }}:${{ steps.deploy-config.outputs.short_sha }}"
+            if [ "${{ steps.deploy-config.outputs.dockerhub_enabled }}" = "true" ]; then
+              echo "   - Docker Hub Image: ${{ steps.deploy-config.outputs.deploy_image }}"
+            fi
+          elif [ "${{ steps.image-push.outcome }}" = "failure" ]; then
+            echo "1. Container Image Publication: FAILED"
+          else
+            echo "1. Container Image Publication: SKIPPED"
+          fi
+          echo ""
+
+          # 2. Kubernetes Manifests YAML Syntax Validation
+          if [ "${{ steps.manifest-validate.outcome }}" = "success" ]; then
+            echo "2. Kubernetes Manifests YAML Syntax Validation: SUCCESSFUL"
+            echo "   - All manifests in k8s/ verified for valid YAML syntax and document structure."
+          elif [ "${{ steps.manifest-validate.outcome }}" = "failure" ]; then
+            echo "2. Kubernetes Manifests YAML Syntax Validation: FAILED"
+          else
+            echo "2. Kubernetes Manifests YAML Syntax Validation: SKIPPED"
+          fi
+          echo ""
+
+          # 3. Kubernetes Cluster Deployment
+          if [ "${{ steps.k8s-deploy.outcome }}" = "success" ]; then
+            echo "3. Kubernetes Cluster Deployment: SUCCESSFUL"
+            echo "   - Cluster rollout verified on deployment/docuai-backend."
+            echo "   - Active Image: ${{ steps.deploy-config.outputs.deploy_image }}"
+            echo "   - ImagePullSecret: docuai-registry-secret (verified)"
+          elif [ "${{ steps.k8s-deploy.outcome }}" = "failure" ]; then
+            echo "3. Kubernetes Cluster Deployment: FAILED"
+            echo "   - Check deployment step logs for failure details."
+          else
+            echo "3. Kubernetes Cluster Deployment: SKIPPED (Continuous Delivery Mode)"
+            echo "   - Container image and validated manifests are published and ready."
+            echo "   - To enable automated live cluster deployment, configure these GitHub Secrets:"
+            echo "       * KUBECONFIG: Base64 or plaintext kubeconfig for target cluster"
+            echo "       * POSTGRES_PASSWORD: Secure PostgreSQL production password"
+            echo "       * DATABASE_URL: PostgreSQL connection URI"
+            echo "       * JWT_SECRET_KEY: 32+ byte cryptographic secret for JWT authentication"
+            echo "       * GHCR_USERNAME: GitHub username owning the pull token"
+            echo "       * GHCR_PULL_TOKEN: Dedicated Personal Access Token with read:packages permission"
+          fi
+          echo "=========================================================="
