@@ -82,9 +82,9 @@ export default function Header({
                 <span className="user-display-name">
                   {user.full_name || user.email.split("@")[0]}
                 </span>
-                <span className="user-role-badge">
+                <span className={`user-role-badge ${user?.role === "admin" ? "admin-badge" : ""}`}>
                   <IconShield size={11} />
-                  Enterprise User
+                  {user?.role === "admin" ? "Administrator" : "Enterprise User"}
                 </span>
               </div>
             </div>

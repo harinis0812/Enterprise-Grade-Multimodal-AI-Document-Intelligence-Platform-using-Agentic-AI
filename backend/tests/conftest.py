@@ -7,6 +7,8 @@ _paddlex_dir = Path(__file__).resolve().parent.parent.parent / ".paddlex"
 _paddlex_dir.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("PADDLE_PDX_CACHE_HOME", str(_paddlex_dir))
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+os.environ.setdefault("JWT_SECRET_KEY", "docuai-secure-test-environment-secret-key-32bytes")
+os.environ.setdefault("DOCUMENT_ENCRYPTION_KEY", "u6j8w3YFv8Z4Z_b-xQk9_6r-9m8hK3n9v7Q3p1z5r9U=")
 
 import pytest
 from sqlalchemy.orm import Session
@@ -62,6 +64,18 @@ def apply_auth_headers_per_test(setup_test_environment):
 
 
 @pytest.fixture(autouse=True)
+def reset_rate_limiter_per_test():
+    """
+    Resets in-memory rate limiting state before and after each test
+    to guarantee per-test isolation and avoid cross-test throttling.
+    """
+    from backend.core.rate_limit import limiter
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
+@pytest.fixture(autouse=True)
 def mock_ocr_service_for_fast_tests(monkeypatch):
     """
     Prevents heavy on-the-fly PaddleOCR CPU model weight downloads/initializations
@@ -76,6 +90,10 @@ def mock_ocr_service_for_fast_tests(monkeypatch):
     )
     monkeypatch.setattr(
         "backend.services.pdf_service.extract_text_from_image",
+        mock_extract
+    )
+    monkeypatch.setattr(
+        "backend.services.multimodal_service.extract_text_from_image",
         mock_extract
     )
     monkeypatch.setattr(

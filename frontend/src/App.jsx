@@ -14,9 +14,35 @@ import { api } from "./services/api";
 import "./App.css";
 
 export default function App() {
-  // Navigation & View state
-  const [activeTab, setActiveTab] = useState("dashboard"); // 'dashboard', 'upload', 'ask', 'history', 'security'
+  // Navigation & View state - supports ?tab=ask or #ask in URL
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tabParam = searchParams.get("tab");
+      if (tabParam && ["dashboard", "upload", "ask", "history", "security"].includes(tabParam)) {
+        return tabParam;
+      }
+      const hash = window.location.hash.replace("#", "").toLowerCase();
+      if (hash && ["dashboard", "upload", "ask", "history", "security"].includes(hash)) {
+        return hash;
+      }
+    } catch {
+      // fallback
+    }
+    return "dashboard";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Sync hash with activeTab so browser reload or back button retains active view
+  useEffect(() => {
+    try {
+      if (window.location.hash.replace("#", "") !== activeTab) {
+        window.history.replaceState(null, "", `#${activeTab}`);
+      }
+    } catch {
+      // fallback
+    }
+  }, [activeTab]);
 
   // Authentication state
   const [token, setToken] = useState(() => localStorage.getItem("docuai_token") || "");

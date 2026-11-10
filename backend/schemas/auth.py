@@ -42,6 +42,7 @@ class UserResponse(BaseModel):
     id: int
     email: str
     full_name: Optional[str] = None
+    role: str = "user"
     is_active: bool
     created_at: datetime
 

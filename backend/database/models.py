@@ -1,9 +1,30 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, TypeDecorator
 from sqlalchemy.orm import relationship
 
+from backend.core.encryption import encrypt_text, decrypt_text
 from backend.database.database import Base
+
+
+class EncryptedText(TypeDecorator):
+    """
+    SQLAlchemy TypeDecorator providing transparent field-level encryption at rest.
+    Encrypts sensitive data with Fernet authenticated encryption before writing to the database,
+    and decrypts back to plaintext when read into application memory.
+    """
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return encrypt_text(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return decrypt_text(value)
 
 
 class User(Base):
@@ -30,6 +51,12 @@ class User(Base):
     full_name = Column(
         String(255),
         nullable=True
+    )
+
+    role = Column(
+        String(50),
+        default="user",
+        nullable=False
     )
 
     is_active = Column(
@@ -83,24 +110,24 @@ class Document(Base):
     )
 
     extracted_text = Column(
-        Text,
+        EncryptedText,
         nullable=True
     )
 
     analysis = Column(
-        Text,
+        EncryptedText,
         nullable=True
     )
 
     agent_trace = Column(
-        Text,
+        EncryptedText,
         nullable=True
     )
 
     user_id = Column(
         Integer,
         ForeignKey("users.id"),
-        nullable=True,
+        nullable=False,
         index=True
     )
 
@@ -152,12 +179,12 @@ class QAHistory(Base):
     )
 
     question = Column(
-        Text,
+        EncryptedText,
         nullable=False
     )
 
     answer = Column(
-        Text,
+        EncryptedText,
         nullable=False
     )
 
@@ -181,6 +208,58 @@ class QAHistory(Base):
     user = relationship(
         "User",
         back_populates="qa_records"
+    )
+
+
+class MultiDocQAHistory(Base):
+    __tablename__ = "multi_doc_qa_history"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    document_ids = Column(
+        String(255),
+        nullable=False
+    )
+
+    question = Column(
+        EncryptedText,
+        nullable=False
+    )
+
+    answer = Column(
+        EncryptedText,
+        nullable=False
+    )
+
+    citations = Column(
+        Text,
+        nullable=True
+    )
+
+    documents_consulted = Column(
+        Text,
+        nullable=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    user = relationship(
+        "User"
     )
 
 
@@ -216,6 +295,41 @@ class AuditLog(Base):
     )
 
     created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    jti = Column(
+        String(255),
+        unique=True,
+        nullable=False,
+        index=True
+    )
+
+    token_type = Column(
+        String(50),
+        default="access",
+        nullable=False
+    )
+
+    expires_at = Column(
+        DateTime,
+        nullable=False,
+        index=True
+    )
+
+    revoked_at = Column(
         DateTime,
         default=datetime.utcnow,
         nullable=False

@@ -1,7 +1,10 @@
 import json
 import re
+import uuid
 from pathlib import Path
 
+import anyio.to_thread
+import fitz
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
@@ -9,6 +12,10 @@ from backend.agents.document_agent import DocumentAgent
 from backend.core.security import get_current_user, log_audit_event
 from backend.database.database import get_db
 from backend.database.models import Document, User
+from backend.services.multimodal_service import (
+    extract_multimodal_image,
+    extract_multimodal_pdf,
+)
 from backend.services.ocr_service import extract_text_from_image
 from backend.services.pdf_service import extract_text_from_pdf
 from mlops.tracking import log_document_processing
@@ -32,6 +39,9 @@ ALLOWED_EXTENSIONS = {
 
 # Maximum upload size: 10 MB.
 MAX_FILE_SIZE = 10 * 1024 * 1024
+
+# Maximum allowed PDF page count to safeguard against resource exhaustion.
+MAX_PDF_PAGES = 100
 
 
 def safe_filename(filename: str) -> str:
@@ -101,10 +111,30 @@ async def upload_document(
             detail="File too large. Maximum allowed size is 10 MB"
         )
 
+    # Validate page limit for PDF files
+    if extension == ".pdf":
+        try:
+            with fitz.open(stream=contents, filetype="pdf") as doc_check:
+                if len(doc_check) > MAX_PDF_PAGES:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"PDF exceeds maximum allowed limit of {MAX_PDF_PAGES} pages."
+                    )
+        except HTTPException:
+            raise
+        except Exception as pdf_err:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid or corrupted PDF file: {str(pdf_err)}"
+            )
+
     filename = safe_filename(file.filename)
 
-    # Temporary file created INSIDE the backend/container.
-    file_path = UPLOAD_DIR / filename
+    # Unique temporary filename per upload to eliminate concurrency collisions
+    # and prevent cross-user temporary file overwriting
+    unique_upload_id = uuid.uuid4().hex
+    temp_filename = f"user_{current_user.id}_{unique_upload_id}_{filename}"
+    file_path = UPLOAD_DIR / temp_filename
 
     try:
         # -----------------------------------------------------
@@ -113,17 +143,19 @@ async def upload_document(
         file_path.write_bytes(contents)
 
         # -----------------------------------------------------
-        # 6. Automatic document extraction
+        # 6. Automatic document extraction (Multimodal Pipeline)
+        # Offloaded to worker thread via anyio.to_thread.run_sync
+        # to ensure the FastAPI asyncio event loop remains non-blocking.
         # -----------------------------------------------------
         try:
             if extension == ".pdf":
-                extracted_text = extract_text_from_pdf(
-                    str(file_path)
-                )
+                multimodal_res = await anyio.to_thread.run_sync(extract_multimodal_pdf, contents)
+                extracted_text = multimodal_res.full_text
+                multimodal_meta = multimodal_res.summary_metadata
             else:
-                extracted_text = extract_text_from_image(
-                    str(file_path)
-                )
+                multimodal_res = await anyio.to_thread.run_sync(extract_multimodal_image, str(file_path))
+                extracted_text = multimodal_res.full_text
+                multimodal_meta = multimodal_res.summary_metadata
         except Exception as parse_error:
             raise HTTPException(
                 status_code=400,
@@ -141,11 +173,12 @@ async def upload_document(
             status = "processed"
 
         # -----------------------------------------------------
-        # 8. Run Agentic AI document workflow
+        # 8. Run Agentic AI document workflow (non-blocking)
         # -----------------------------------------------------
         agent = DocumentAgent()
 
-        result = agent.process(
+        result = await anyio.to_thread.run_sync(
+            agent.process,
             filename,
             extracted_text
         )
@@ -203,7 +236,8 @@ async def upload_document(
                         "document_information": document_information,
                         "analysis": analysis,
                         "supervisor_decision": supervisor_decision,
-                        "verification": verification
+                        "verification": verification,
+                        "multimodal_metadata": multimodal_meta
                     }
                 ),
                 agent_trace=json.dumps(agent_trace)
@@ -266,21 +300,26 @@ async def upload_document(
         # -----------------------------------------------------
         # 13. Delete temporary uploaded file
         # -----------------------------------------------------
+        await file.close()
+
         if file_path.exists():
             try:
                 file_path.unlink()
             except Exception as cleanup_error:
-                print(
-                    f"[Upload Cleanup] Warning: "
-                    f"Could not delete temporary file "
-                    f"{file_path}: {cleanup_error}"
-                )
-
-        await file.close()
+                import gc
+                gc.collect()
+                try:
+                    file_path.unlink()
+                except Exception:
+                    print(
+                        f"[Upload Cleanup] Warning: "
+                        f"Could not delete temporary file "
+                        f"{file_path}: {cleanup_error}"
+                    )
 
 
 # =============================================================
-# GET ALL DOCUMENTS (Scoped to authenticated owner & legacy docs)
+# GET ALL DOCUMENTS (Strictly scoped to authenticated owner)
 # =============================================================
 
 @router.get("/documents")
@@ -288,12 +327,10 @@ def get_documents(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Returns documents owned by this user, plus legacy documents that haven't been claimed
+    # Returns documents strictly owned by the authenticated user
     documents = (
         db.query(Document)
-        .filter(
-            (Document.user_id == current_user.id) | (Document.user_id == None)
-        )
+        .filter(Document.user_id == current_user.id)
         .order_by(Document.id.desc())
         .all()
     )
@@ -315,7 +352,7 @@ def get_documents(
 
 
 # =============================================================
-# GET SINGLE DOCUMENT (Scoped with access control)
+# GET SINGLE DOCUMENT (Scoped with strict access control)
 # =============================================================
 
 @router.get("/documents/{document_id}")
@@ -341,8 +378,8 @@ def get_document(
             detail="Document not found"
         )
 
-    # Multi-tenant isolation: prevent cross-user document access
-    if document.user_id is not None and document.user_id != current_user.id:
+    # Multi-tenant isolation: enforce strict ownership; unowned/NULL documents are denied
+    if document.user_id != current_user.id:
         log_audit_event(
             db=db,
             event_type="CROSS_USER_ACCESS_DENIED",
@@ -354,11 +391,6 @@ def get_document(
             status_code=403,
             detail="Access denied. You do not have permission to view this document."
         )
-
-    # Claim legacy document if unassigned
-    if document.user_id is None:
-        document.user_id = current_user.id
-        db.commit()
 
     log_audit_event(
         db=db,

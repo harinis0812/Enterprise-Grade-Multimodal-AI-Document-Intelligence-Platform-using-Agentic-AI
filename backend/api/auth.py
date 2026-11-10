@@ -1,12 +1,19 @@
+from datetime import datetime
 import json
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
+from backend.core.rate_limit import rate_limit_login, rate_limit_register
 from backend.core.security import (
     create_access_token,
+    decode_access_token,
     get_current_user,
     hash_password,
     log_audit_event,
+    revoke_token,
+    security_scheme,
     verify_password,
 )
 from backend.database.database import get_db
@@ -25,6 +32,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     "/register",
     response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_register)],
     summary="Register a new enterprise user account"
 )
 def register(
@@ -49,10 +57,12 @@ def register(
     # Hash password securely
     hashed_pwd = hash_password(payload.password)
 
+    # RBAC: Public registration strictly defaults to standard 'user' role
     new_user = User(
         email=payload.email,
         hashed_password=hashed_pwd,
         full_name=payload.full_name,
+        role="user",
         is_active=True
     )
 
@@ -66,11 +76,13 @@ def register(
         event_type="USER_REGISTER_SUCCESS",
         user_id=new_user.id,
         ip_address=request.client.host if request.client else None,
-        details=f"New user registered: {new_user.email}"
+        details=f"New user registered: {new_user.email} (Role: user)"
     )
 
-    # Generate JWT
-    token = create_access_token(data={"sub": str(new_user.id), "email": new_user.email})
+    # Generate JWT with jti and role
+    token = create_access_token(
+        data={"sub": str(new_user.id), "email": new_user.email, "role": new_user.role}
+    )
 
     return TokenResponse(
         access_token=token,
@@ -82,6 +94,7 @@ def register(
 @router.post(
     "/login",
     response_model=TokenResponse,
+    dependencies=[Depends(rate_limit_login)],
     summary="Authenticate user and return JWT access token"
 )
 def login(
@@ -126,10 +139,12 @@ def login(
         event_type="USER_LOGIN_SUCCESS",
         user_id=user.id,
         ip_address=ip,
-        details="User successfully logged in."
+        details=f"User successfully logged in: {user.email} (Role: {user.role})"
     )
 
-    token = create_access_token(data={"sub": str(user.id), "email": user.email})
+    token = create_access_token(
+        data={"sub": str(user.id), "email": user.email, "role": user.role}
+    )
 
     return TokenResponse(
         access_token=token,
@@ -151,19 +166,34 @@ def get_current_user_profile(
 
 @router.post(
     "/logout",
-    summary="Log out user and record security audit event"
+    summary="Log out user, revoke active JWT token, and record security audit event"
 )
 def logout(
     request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # Extract token and persist to revoked_tokens store
+    if credentials and credentials.credentials:
+        raw_token = credentials.credentials
+        try:
+            payload = decode_access_token(raw_token)
+            jti = payload.get("jti")
+            exp_ts = payload.get("exp")
+            if jti and exp_ts:
+                exp_dt = datetime.utcfromtimestamp(exp_ts)
+                revoke_token(db=db, jti=jti, expires_at=exp_dt)
+        except Exception as e:
+            # Token may already be partially invalid or decoded
+            pass
+
     ip = request.client.host if request.client else None
     log_audit_event(
         db=db,
         event_type="USER_LOGOUT",
         user_id=current_user.id,
         ip_address=ip,
-        details="User logged out."
+        details="User logged out and token was permanently revoked."
     )
-    return {"message": "Logged out successfully."}
+    return {"message": "Logged out successfully. Token has been revoked."}

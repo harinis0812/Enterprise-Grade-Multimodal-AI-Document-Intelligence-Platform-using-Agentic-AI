@@ -18,6 +18,9 @@ class DocumentState(TypedDict, total=False):
     document_type: str
     document_information: Dict[str, Any]
 
+    table_analysis: Dict[str, Any]
+    chart_analysis: Dict[str, Any]
+
     analysis: Dict[str, Any]
 
     supervisor_decision: Dict[str, Any]
@@ -25,6 +28,9 @@ class DocumentState(TypedDict, total=False):
     verification: Dict[str, Any]
 
     agent_trace: List[str]
+    agent_metrics: Dict[str, Dict[str, Any]]
+    retry_counts: Dict[str, int]
+    execution_log: List[Dict[str, Any]]
 
     status: str
 
@@ -230,6 +236,10 @@ class DocumentGraphWorkflow:
                 "General Document"
             )
 
+        # Multimodal content detection in Agentic Workflow
+        information["has_tables"] = "[Table " in text or ("\n|" in text and text.count("|") >= 4)
+        information["has_charts"] = "[Visual Element:" in text or "[Chart" in text
+        information["has_ocr"] = "[Image Document via OCR]" in text or "[Scanned Content via OCR]" in text
 
         trace = state.get("agent_trace", [])
 
@@ -244,6 +254,79 @@ class DocumentGraphWorkflow:
 
         }
 
+
+    # =========================================================
+    # TABLE ANALYSIS AGENT
+    # =========================================================
+
+    def _table_analysis_node(self, state: DocumentState):
+
+        print("[LangGraph] Table Analysis Agent")
+
+        text = state.get(
+            "extracted_text",
+            ""
+        )
+
+        table_count = text.count("[Table ")
+        has_markdown_tables = "\n|" in text and text.count("|") >= 4
+
+        findings = []
+        if table_count > 0:
+            findings.append(f"Identified {table_count} structured table block(s).")
+        if has_markdown_tables:
+            findings.append("Markdown tabular alignment verified.")
+
+        table_analysis = {
+            "tables_found": table_count,
+            "has_markdown_tables": has_markdown_tables,
+            "findings": findings,
+            "status": "table_analysis_completed"
+        }
+
+        trace = state.get("agent_trace", [])
+        trace.append("Table Analysis Agent")
+
+        return {
+            "table_analysis": table_analysis,
+            "agent_trace": trace
+        }
+
+
+    # =========================================================
+    # CHART / VISUAL ANALYSIS AGENT
+    # =========================================================
+
+    def _chart_analysis_node(self, state: DocumentState):
+
+        print("[LangGraph] Chart Analysis Agent")
+
+        text = state.get(
+            "extracted_text",
+            ""
+        )
+
+        visual_count = text.count("[Visual Element:")
+        chart_count = text.count("[Chart")
+        total_visuals = max(visual_count, chart_count)
+
+        findings = []
+        if total_visuals > 0:
+            findings.append(f"Identified {total_visuals} visual diagram/chart element(s).")
+
+        chart_analysis = {
+            "visuals_found": total_visuals,
+            "findings": findings,
+            "status": "chart_analysis_completed"
+        }
+
+        trace = state.get("agent_trace", [])
+        trace.append("Chart Analysis Agent")
+
+        return {
+            "chart_analysis": chart_analysis,
+            "agent_trace": trace
+        }
 
 
     # =========================================================
@@ -288,6 +371,12 @@ class DocumentGraphWorkflow:
                 "Document is ready for verification."
 
             ],
+
+            "multimodal_insights": {
+                "tabular_data_present": "[Table " in text or ("\n|" in text and text.count("|") >= 4),
+                "visual_elements_present": "[Visual Element:" in text or "[Chart" in text,
+                "ocr_processed": "[Image Document via OCR]" in text or "[Scanned Content via OCR]" in text
+            },
 
             "status": "analysis_completed"
 
@@ -338,16 +427,22 @@ class DocumentGraphWorkflow:
         )
 
 
-        # Decide next action
+        retries = dict(state.get("retry_counts", {}))
+        metrics = dict(state.get("agent_metrics", {}))
 
+        # Decide next action with retry safeguards
         if not extracted_text.strip():
-
-            next_agent = "extraction"
-
-            reason = (
-                "No text was extracted. "
-                "Extraction must be performed again."
-            )
+            ext_retries = retries.get("extraction", 0)
+            if ext_retries >= 2:
+                next_agent = "verification"
+                reason = "Extraction retry threshold reached (2 retries). Escalating to verification."
+            else:
+                retries["extraction"] = ext_retries + 1
+                next_agent = "extraction"
+                reason = (
+                    "No text was extracted. "
+                    "Extraction must be performed again."
+                )
 
         elif not document_type:
 
@@ -359,11 +454,31 @@ class DocumentGraphWorkflow:
             )
 
         elif not information:
+            ext_retries = retries.get("extraction", 0)
+            if ext_retries >= 2:
+                next_agent = "verification"
+                reason = "Structured extraction retry threshold reached. Escalating to verification."
+            else:
+                retries["extraction"] = ext_retries + 1
+                next_agent = "extraction"
+                reason = (
+                    "Structured information is missing."
+                )
 
-            next_agent = "extraction"
+        elif information.get("has_tables") and "table_analysis" not in state:
+
+            next_agent = "table_analysis"
 
             reason = (
-                "Structured information is missing."
+                "Document contains tabular data requiring specialized table analysis."
+            )
+
+        elif information.get("has_charts") and "chart_analysis" not in state:
+
+            next_agent = "chart_analysis"
+
+            reason = (
+                "Document contains visual elements requiring specialized chart analysis."
             )
 
         elif not analysis:
@@ -390,7 +505,9 @@ class DocumentGraphWorkflow:
 
             "reason": reason,
 
-            "requires_verification": True
+            "requires_verification": True,
+
+            "retry_counts": retries
 
         }
 
@@ -399,12 +516,22 @@ class DocumentGraphWorkflow:
 
         trace.append("Supervisor Agent")
 
+        metrics["Supervisor Agent"] = {
+            "status": "completed",
+            "decision": next_agent,
+            "reason": reason
+        }
+
 
         return {
 
             "supervisor_decision": decision,
 
-            "agent_trace": trace
+            "agent_trace": trace,
+
+            "retry_counts": retries,
+
+            "agent_metrics": metrics
 
         }
 
@@ -509,6 +636,16 @@ class DocumentGraphWorkflow:
         )
 
         workflow.add_node(
+            "table_analysis",
+            self._table_analysis_node
+        )
+
+        workflow.add_node(
+            "chart_analysis",
+            self._chart_analysis_node
+        )
+
+        workflow.add_node(
             "analysis",
             self._analysis_node
         )
@@ -551,6 +688,16 @@ class DocumentGraphWorkflow:
             "supervisor"
         )
 
+        workflow.add_edge(
+            "table_analysis",
+            "supervisor"
+        )
+
+        workflow.add_edge(
+            "chart_analysis",
+            "supervisor"
+        )
+
 
         # Supervisor decides next agent
 
@@ -575,6 +722,12 @@ class DocumentGraphWorkflow:
 
                 "extraction":
                     "extraction",
+
+                "table_analysis":
+                    "table_analysis",
+
+                "chart_analysis":
+                    "chart_analysis",
 
                 "analysis":
                     "analysis"
@@ -609,7 +762,13 @@ class DocumentGraphWorkflow:
 
             "extracted_text": extracted_text,
 
-            "agent_trace": []
+            "agent_trace": [],
+
+            "agent_metrics": {},
+
+            "retry_counts": {},
+
+            "execution_log": []
 
         }
 

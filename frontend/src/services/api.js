@@ -25,14 +25,33 @@ export function getAuthHeaders(token, hasBody = false) {
 
 /**
  * Safely parse HTTP responses, extracting JSON detail or fallback text.
+ * Flags 429 Rate Limiting and 401 Unauthorized states.
  */
 export async function readResponse(response) {
   const contentType = response.headers.get("content-type") || "";
+  let data = null;
   if (contentType.includes("application/json")) {
-    return await response.json();
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
+  } else {
+    const text = await response.text();
+    data = { detail: text || "An unexpected server response occurred." };
   }
-  const text = await response.text();
-  return { detail: text || "An unexpected server response occurred." };
+
+  if (!data || typeof data !== "object") {
+    data = { detail: "An unexpected server response occurred." };
+  }
+
+  if (response.status === 429) {
+    data.isRateLimited = true;
+    data.detail = data.detail || "Rate limit reached. Please wait a moment before trying again.";
+  } else if (response.status === 401) {
+    data.isUnauthorized = true;
+  }
+  return data;
 }
 
 /**
@@ -225,6 +244,33 @@ export const api = {
     return data.history || [];
   },
 
+  async askMultiDocumentQuestion(documentIds, question, token) {
+    const res = await fetch(`${API_URL}/documents/multi-qa`, {
+      method: "POST",
+      headers: getAuthHeaders(token, true),
+      body: JSON.stringify({
+        document_ids: documentIds,
+        question: question.trim(),
+      }),
+    });
+    const data = await readResponse(res);
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to answer multi-document question.");
+    }
+    return data;
+  },
+
+  async getMultiDocumentQAHistory(token) {
+    const res = await fetch(`${API_URL}/documents/multi-qa/history`, {
+      headers: getAuthHeaders(token, false),
+    });
+    const data = await readResponse(res);
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to load multi-document Q&A history.");
+    }
+    return data.history || [];
+  },
+
   async getAuditLogs(token) {
     const res = await fetch(`${API_URL}/audit-logs`, {
       headers: getAuthHeaders(token, false),
@@ -234,5 +280,40 @@ export const api = {
       throw new Error(data.detail || "Failed to fetch audit logs.");
     }
     return data.logs || [];
+  },
+
+  async getAdminUsers(token) {
+    const res = await fetch(`${API_URL}/admin/users`, {
+      headers: getAuthHeaders(token, false),
+    });
+    const data = await readResponse(res);
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to load admin user list.");
+    }
+    return data;
+  },
+
+  async getAdminStats(token) {
+    const res = await fetch(`${API_URL}/admin/stats`, {
+      headers: getAuthHeaders(token, false),
+    });
+    const data = await readResponse(res);
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to load admin statistics.");
+    }
+    return data;
+  },
+
+  async updateAdminUserRole(userId, role, token) {
+    const res = await fetch(`${API_URL}/admin/users/${userId}/role`, {
+      method: "PUT",
+      headers: getAuthHeaders(token, true),
+      body: JSON.stringify({ role }),
+    });
+    const data = await readResponse(res);
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to update user role.");
+    }
+    return data;
   },
 };
