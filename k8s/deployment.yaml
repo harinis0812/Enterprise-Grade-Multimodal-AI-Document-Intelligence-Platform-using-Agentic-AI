@@ -32,6 +32,11 @@ spec:
                 secretKeyRef:
                   name: docuai-secrets
                   key: JWT_SECRET_KEY
+            - name: DOCUMENT_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: docuai-secrets
+                  key: DOCUMENT_ENCRYPTION_KEY
             - name: MLFLOW_TRACKING_URI
               value: "mlruns"
 
