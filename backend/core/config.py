@@ -107,7 +107,12 @@ class Settings:
     API_V1_STR: str = "/api"
 
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./docuai.db")
+    @property
+    def DATABASE_URL(self) -> str:
+        url = os.getenv("DATABASE_URL", "sqlite:///./docuai.db")
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        return url
 
     # JWT / Security Settings
     # Enforces non-empty, cryptographically strong key from environment (no hardcoded fallback)

@@ -9,6 +9,10 @@ DATABASE_URL = os.getenv(
     "sqlite:///./docuai.db"
 )
 
+# Normalize Render/Heroku legacy postgres:// URL prefix to postgresql:// for SQLAlchemy 2.0+
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 
 connect_args = {}
 
