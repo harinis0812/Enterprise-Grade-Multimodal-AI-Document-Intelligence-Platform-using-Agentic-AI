@@ -4,33 +4,66 @@ An autonomous, production-grade enterprise document intelligence platform that i
 
 ---
 
-## Table of Contents
+## Live Production Deployments
 
-- [Project Overview](#project-overview)
-- [Problem Statement](#problem-statement)
-- [Objectives](#objectives)
-- [Key Features](#key-features)
-- [Technology Stack](#technology-stack)
-- [System Architecture](#system-architecture)
-- [Seven Development Phases](#seven-development-phases)
-- [Agentic AI Workflow](#agentic-ai-workflow)
-- [Multimodal Document Processing](#multimodal-document-processing)
-- [RAG and PDF Question Answering](#rag-and-pdf-question-answering)
-- [Security Implementation](#security-implementation)
-- [Database Design](#database-design)
-- [API Endpoints](#api-endpoints)
-- [Installation and Setup](#installation-and-setup)
-- [Running the Application](#running-the-application)
-- [Testing and Verification Results](#testing-and-verification-results)
-- [Known Limitations](#known-limitations)
-- [Future Enhancements](#future-enhancements)
-- [Project Structure](#project-structure)
+| Component | Platform | Live Production URL | Deployment Type | Status |
+| :--- | :--- | :--- | :--- | :---: |
+| **Frontend Web Application** | **Vercel** | [https://enterprise-grade-multimodal-ai-docu.vercel.app/](https://enterprise-grade-multimodal-ai-docu.vercel.app/) | SPA (React 19 + Vite) | **LIVE / VERIFIED** |
+| **Backend REST API & Docs** | **Render** | [https://enterprise-grade-multimodal-ai-document.onrender.com](https://enterprise-grade-multimodal-ai-document.onrender.com) | FastAPI Container | **LIVE / VERIFIED** |
+| **Backend Health Check** | **Render** | [https://enterprise-grade-multimodal-ai-document.onrender.com/health](https://enterprise-grade-multimodal-ai-document.onrender.com/health) | System & DB Status | **LIVE / 200 OK** |
+| **Interactive API Documentation** | **Render** | [https://enterprise-grade-multimodal-ai-document.onrender.com/docs](https://enterprise-grade-multimodal-ai-document.onrender.com/docs) | OpenAPI / Swagger UI | **LIVE / VERIFIED** |
+| **Container Registry** | **GitHub Packages** | `ghcr.io/adhithya-p-2004/docuai-backend:latest` | GHCR Docker Image | **PUBLISHED** |
 
 ---
 
-## Project Overview
+## Table of Contents
 
-Modern enterprises process thousands of mission-critical documents daily—invoices, regulatory filings, financial disclosures, contracts, technical specifications, and executive reports. These documents arrive in diverse formats, often blending structured tables, unstructured prose, scanned pages, and visual diagrams. 
+1. [Project Overview](#1-project-overview)
+2. [Problem Statement](#2-problem-statement)
+3. [Project Objectives](#3-project-objectives)
+4. [Key Features](#4-key-features)
+5. [Multimodal Document Intelligence Capabilities](#5-multimodal-document-intelligence-capabilities)
+6. [Agentic AI Architecture & Workflow](#6-agentic-ai-architecture-workflow)
+7. [System Architecture](#7-system-architecture)
+8. [Technology Stack](#8-technology-stack)
+9. [Frontend Architecture](#9-frontend-architecture)
+10. [Backend Architecture](#10-backend-architecture)
+11. [Database Architecture — SQLite & Field-Level Encryption](#11-database-architecture-sqlite-field-level-encryption)
+12. [Document Ingestion & Processing Pipeline](#12-document-ingestion-processing-pipeline)
+13. [OCR & Text Extraction Workflow](#13-ocr-text-extraction-workflow)
+14. [Retrieval-Augmented Generation (RAG)](#14-retrieval-augmented-generation-rag)
+15. [Question-Answering Workflow](#15-question-answering-workflow)
+16. [Multi-Document Intelligence](#16-multi-document-intelligence)
+17. [Authentication & Authorization](#17-authentication-authorization)
+18. [Document Encryption & Security Implementation](#18-document-encryption-security-implementation)
+19. [API Overview & Important Endpoints](#19-api-overview-important-endpoints)
+20. [Repository Structure](#20-repository-structure)
+21. [Local Installation Requirements](#21-local-installation-requirements)
+22. [Backend Setup Commands](#22-backend-setup-commands)
+23. [Frontend Setup Commands](#23-frontend-setup-commands)
+24. [Environment Variable Configuration](#24-environment-variable-configuration)
+25. [Local Testing Instructions](#25-local-testing-instructions)
+26. [Docker Architecture & Build Instructions](#26-docker-architecture-build-instructions)
+27. [Docker Compose Instructions](#27-docker-compose-instructions)
+28. [GitHub Actions CI/CD Workflow](#28-github-actions-cicd-workflow)
+29. [GHCR Container Image Publishing](#29-ghcr-container-image-publishing)
+30. [Render Backend Deployment](#30-render-backend-deployment)
+31. [Vercel Frontend Deployment](#31-vercel-frontend-deployment)
+32. [Production Frontend-Backend Integration](#32-production-frontend-backend-integration)
+33. [Kubernetes Manifests & Deployment Instructions](#33-kubernetes-manifests-deployment-instructions)
+34. [Kubernetes Deployment Status & Limitations](#34-kubernetes-deployment-status-limitations)
+35. [Testing & Verification Results](#35-testing-verification-results)
+36. [Security Considerations & Audit Findings](#36-security-considerations-audit-findings)
+37. [Current Deployment Limitations](#37-current-deployment-limitations)
+38. [Troubleshooting Guide](#38-troubleshooting-guide)
+39. [Future Enhancements Roadmap](#39-future-enhancements-roadmap)
+40. [Conclusion](#40-conclusion)
+
+---
+
+## 1. Project Overview
+
+Modern enterprises process thousands of mission-critical documents daily—invoices, regulatory filings, financial disclosures, contracts, technical specifications, and executive reports. These documents arrive in diverse formats, often blending structured tables, unstructured prose, scanned pages, and visual diagrams.
 
 Traditional Optical Character Recognition (OCR) systems extract uncontextualized text streams, while standard Large Language Model (LLM) pipelines suffer from hallucinations, context window overflow, lack of verifiable source attribution, and vulnerability to prompt injection. Furthermore, enterprise adoption is frequently halted by stringent security, privacy, and regulatory requirements (GDPR, HIPAA, SOC 2) prohibiting unencrypted storage, leaky logs, or cross-tenant data exposure.
 
@@ -43,19 +76,19 @@ The **Enterprise-Grade Multimodal AI Document Intelligence Platform Using Agenti
 
 ---
 
-## Problem Statement
+## 2. Problem Statement
 
 Enterprise document workflows face several persistent operational and technological hurdles:
 
 - **Heterogeneous Document Formats:** Real-world documents are rarely clean digital text. They contain scanned receipts, multi-page financial tables spanning page breaks, embedded charts, and handwritten annotations.
-- **LLM Hallucination and Traceability Deficits:** Standard generative AI applications frequently generate plausible-sounding but factually inaccurate answers without verifiable citations to specific pages, tables, or source documents.
+- **LLM Hallucination & Traceability Deficits:** Standard generative AI applications frequently generate plausible-sounding but factually inaccurate answers without verifiable citations to specific pages, tables, or source documents.
 - **Cross-Document Synthesis Bottlenecks:** Comparing data across multiple documents (e.g., comparing FY2023 revenue in an annual report against FY2024 projections in a strategy memo) requires manual correlation and cross-referencing.
 - **Brittle Monolithic Pipelines:** Traditional extraction pipelines lack self-correction. If a parser fails on a corrupted table or scanned page, the entire extraction pipeline crashes without retry mechanisms or human-in-the-loop review flags.
-- **Security and Compliance Exposure:** Storing extracted text, executive summaries, and Q&A transcripts in plaintext exposes sensitive enterprise data. Additionally, missing request rate limits, lack of distributed tracing, and unmitigated cross-tenant authorization flaws risk severe regulatory violations.
+- **Security & Compliance Exposure:** Storing extracted text, executive summaries, and Q&A transcripts in plaintext exposes sensitive enterprise data. Additionally, missing request rate limits, lack of distributed tracing, and unmitigated cross-tenant authorization flaws risk severe regulatory violations.
 
 ---
 
-## Objectives
+## 3. Project Objectives
 
 The platform was designed, implemented, and verified to achieve the following core objectives:
 
@@ -63,197 +96,116 @@ The platform was designed, implemented, and verified to achieve the following co
 2. **Autonomous Agentic Coordination:** Implement a multi-agent system using LangGraph where specialized agents collaborate, cross-verify outputs, track execution metrics, and handle failures with bounded retries (maximum 2 retries) before graceful escalation.
 3. **Verifiable, Grounded Retrieval-Augmented Generation (RAG):** Provide question-answering with authentic page-level and document-level citations, eliminating hallucinated responses and layout metadata artifacts (such as headers or page labels).
 4. **Cross-Document Comparative Intelligence:** Enable authenticated users to select multiple documents and ask cross-cutting comparative questions with clear multi-source attribution.
-5. **Cryptographic Protection at Rest:** Enforce field-level authenticated encryption (AES-128-CBC + HMAC-SHA256) across all sensitive columns in the database, ensuring zero plaintext exposure in storage dumps.
+5. **Cryptographic Protection at Rest:** Enforce field-level authenticated encryption (AES-128-CBC + HMAC-SHA256) across all sensitive columns in the SQLite database, ensuring zero plaintext exposure in storage dumps.
 6. **Robust Multi-Tenancy & Access Governance:** Enforce strict user-level data boundaries across all document access and synthesis routes, logging access violations as security audit events.
-7. **Production-Ready Observability & Deployment:** Containerize backend and database services using Docker Compose, support distributed tracing via ASGI request ID middleware, implement zero-leak latency logging, and integrate MLflow for experiment tracking.
+7. **Production-Ready Observability & Deployment:** Containerize backend services with dynamic port binding, deploy frontend to Vercel and backend to Render, support distributed tracing via ASGI request ID middleware, implement zero-leak latency logging, and integrate automated GitHub Actions CI/CD workflows.
 
 ---
 
-## Key Features
+## 4. Key Features
 
-### 1. Multimodal Document Ingestion
-- **Native Digital Text Extraction:** High-speed text extraction via PyMuPDF (`fitz`), preserving structural reading order and page boundaries.
-- **Intelligent Mixed-Content OCR:** Analyzes text density per page; automatically activates PaddleOCR for scanned or image-heavy pages, calculating bounding-box coverage and deduplicating overlapping text.
-- **Structural Table Extraction:** Detects tables with PyMuPDF `find_tables()`, converts them into standard GitHub Flavored Markdown, preserves row/column alignments, and maintains page continuity markers.
-- **Visual Element & Chart Detection:** Identifies embedded vector drawings, plots, and layout diagrams, distinguishing structural separators from semantic business charts.
-
-### 2. Autonomous Multi-Agent Reasoning (LangGraph)
-- **Specialized Agent Roles:** Deploys Document Intake, Classification, Extraction, Analysis, Supervisor, Verification, and Multi-Document Synthesis agents.
-- **Cyclic Supervisor Graph:** The Supervisor Agent evaluates extraction completeness, dispatches corrective retries (capped at 2 attempts), prevents infinite loops, and escalates unresolved ambiguities to human review (`needs_review`).
-- **Telemetry & Execution Metrics:** The shared state tracks per-agent timestamps, execution duration in milliseconds, decision outcomes, and retry counts.
-
-### 3. Dual-Mode Grounded Question Answering
-- **Single Document Q&A:** Targeted, in-depth questioning against a specific active document with page citations and multimodal evidence badges (Table, Chart, OCR, Text).
-- **Multi-Document Synthesis:** Cross-document intelligence across user-selected document sets. Provides synthesis responses highlighting source files consulted, contrasting findings, and citing individual documents.
-- **Intent Classification:** Word-boundary regex tokenization identifies question intent (`financial`, `comparison`, `tabular`, `visual`, `summary`, `factual`) without substring collisions.
-- **Domain Synonym & Acronym Expansion:** Expands financial, technical, and executive terminology (e.g., `revenue` $\leftrightarrow$ `sales, income, turnover`; `CEO`, `OCR`, `NLP`) to maximize passage recall.
-- **Zero-Hallucination Fallback:** Operates with Google Gemini 1.5 Flash when API keys are configured; seamlessly switches to a high-precision multi-sentence extractive fallback engine when offline or unconfigured.
-- **Layout & Metadata Filtration:** Robust filtering (`is_header_or_metadata`, `clean_passage_text`) ensures running headers, page numbers, and title tags are never returned as answers or citation quotes.
-
-### 4. Enterprise-Grade Defense-in-Depth Security
-- **Authenticated Encryption at Rest:** Sensitive database columns (`extracted_text`, `analysis`, `agent_trace`, `QAHistory`, `MultiDocQAHistory`) are encrypted using Fernet (AES-128-CBC + HMAC-SHA256) via an automatic SQLAlchemy `EncryptedText` TypeDecorator.
-- **JWT Authentication & Lifecycle:** HMAC-SHA256 tokens with cryptographically enforced secret length (minimum 32 characters). Includes a database-backed `RevokedToken` blacklist (`POST /auth/logout`) tracking JTI claims.
-- **Brute-Force Rate Limiting:** Sliding-window in-memory rate limiting applied to authentication endpoints (`/auth/login` capped at 5/min, `/auth/register` capped at 3/min).
-- **Role-Based Access Control (RBAC):** Distinct `user` and `admin` permission tiers with administrative APIs for user listing, role promotion, and system telemetry (`/admin/users`, `/admin/stats`).
-- **Strict Multi-Tenant Isolation:** All document lookups, single-doc Q&A, and multi-doc synthesis requests verify document ownership against `current_user.id`. Any unauthorized access attempts return HTTP 403/404 and record `CROSS_USER_ACCESS_DENIED` in the immutable audit log.
-- **Prompt Injection Defense:** Untrusted document context is strictly isolated within `<document_context>` XML boundaries.
-
-### 5. Production Observability & Scalability
-- **Distributed Request Tracing:** Pure ASGI `RequestIDMiddleware` validates incoming `X-Request-ID` headers against `^[a-zA-Z0-9\-_]{1,64}$` or generates UUID4 fallbacks, propagating them across response headers and application logs.
-- **Zero-Leak Latency Logging:** Structured timing logs capture HTTP method, path, status, and duration in milliseconds while strictly redacting authorization tokens, passwords, cookies, query parameters, and document payloads.
-- **Database Connection Pooling:** Dynamic SQLAlchemy configuration supporting SQLite for lightweight development and PostgreSQL 16 with pre-ping validation (`pool_pre_ping=True`, `pool_size=5`, `max_overflow=10`, `pool_timeout=30`) for production.
-- **Container Orchestration:** Optimized multi-stage `Dockerfile` (Python 3.11-slim) and `docker-compose.yml` orchestrating FastAPI and PostgreSQL 16 with health check dependencies.
-- **MLOps Tracking:** MLflow tracking logs document processing runs, file types, word counts, and agent execution times.
-
-### 6. Modern Dual-Mode User Interface
-- **Vite + React 19 Frontend:** Modern, high-performance web interface styled with vanilla CSS.
-- **Dual-Mode Switcher Tabs:** Seamless switching between Single Document Q&A and Multi-Document Synthesis.
-- **Multi-Document Scope Controls:** Interactive document chips with one-click **Select All** and **Clear All** capabilities, selection counters, and safety validation.
-- **Rich Citation Cards:** Expandable citation cards displaying source document badges (`📄 filename.pdf` or `Doc #id`), page numbers, evidence types, and retrieval relevance percentages.
-- **Documents-Consulted Indicators:** Visual pills highlighting all files synthesized during cross-document analysis.
+- **Automated Hybrid Ingestion:** Native text extraction via PyMuPDF with seamless OCR fallback for scanned pages using PaddleOCR.
+- **Autonomous Multi-Agent Workflow:** 7 specialized agents coordinated via LangGraph state graphs with supervisor evaluation and self-correction loops.
+- **Dual-Mode Interactive Q&A:** Single-document targeted interrogation and multi-document cross-synthesis.
+- **Verifiable Citations:** Exact page numbers, quoted text passages, evidence categories (Text, Table, OCR, Chart), and retrieval relevance percentages.
+- **Zero-Trust Security Architecture:** Authenticated Fernet encryption at rest, bcrypt password hashing, JWT authentication with server-side revocation, and sliding-window rate limiting.
+- **Enterprise Multi-Tenancy:** Complete tenant isolation where users access only their own uploaded documents and Q&A histories.
+- **Automated CI/CD Pipeline:** Fully automated GitHub Actions workflow validating backend test suites, frontend builds, Docker packaging, and publishing images to GitHub Container Registry (GHCR).
 
 ---
 
-## Technology Stack
+## 5. Multimodal Document Intelligence Capabilities
 
-| Layer | Component | Version / Specification | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Frontend** | React | 19.x | Component-based interactive user interface |
-| | Vite | 8.2.x | Next-generation frontend tooling and bundler |
-| | Lucide React | Latest | Modern iconography |
-| | Axios | Latest | Promise-based HTTP client with auth interceptors |
-| **Backend & API** | Python | 3.11.x | Core programming language |
-| | FastAPI | 0.110+ | High-performance asynchronous REST API framework |
-| | Uvicorn | Latest | ASGI web server implementation |
-| | Pydantic | v2 | Request/response data validation and schema management |
-| **Multimodal AI** | PyMuPDF (`fitz`) | 1.23+ | High-performance PDF parsing, text, table, and layout extraction |
-| | PaddleOCR | 2.7+ | Optical Character Recognition for scanned pages |
-| | Pillow & OpenCV | Latest | Image processing, conversion, and geometry calculation |
-| **Agentic AI & LLM** | LangGraph | 0.0.30+ | Multi-agent state graph orchestration and cyclic execution |
-| | LangChain Core | Latest | Base agent interfaces and prompt message structures |
-| | Google Gemini API | 1.5 Flash | Multimodal generative question answering and reasoning |
-| **Security & Auth** | Cryptography (Fernet) | Latest | Authenticated AES-128-CBC + HMAC-SHA256 field-level encryption |
-| | PyJWT | Latest | JSON Web Token encoding, decoding, and JTI claims |
-| | Passlib & Bcrypt | Latest | Cryptographic password hashing with unique salt |
-| **Database & MLOps** | SQLAlchemy | 2.x | Database ORM, dynamic engine pooling, and TypeDecorators |
-| | PostgreSQL | 16 | Production relational database |
-| | SQLite | 3.x | Zero-configuration local development database |
-| | MLflow | 2.11+ | MLOps experiment tracking and document processing telemetry |
-| **DevOps & Infra** | Docker & Compose | Compose v2 | Containerization and multi-service orchestration |
-| | ASGI Middleware | Custom | Distributed tracing (`X-Request-ID`) and safe latency logging |
-| **Testing** | Pytest | Latest | Automated testing framework (128 passing tests) |
-| | HTTPX | Latest | Async HTTP testing client |
+| Capability | Engine / Technology | Description |
+| :--- | :--- | :--- |
+| **Digital Text Parsing** | PyMuPDF (`fitz`) | High-speed text extraction preserving font encoding, coordinates, and reading flow. |
+| **Scanned Page OCR** | PaddleOCR | Automatically triggered when page character density < 50 chars or image area > 50%. |
+| **Table Extraction** | PyMuPDF `find_tables()` | Extracts grid boundaries and converts raw cells into clean GitHub Flavored Markdown. |
+| **Visual Chart Detection** | Geometric Vector Analysis | Detects drawings, plots, and figures; distinguishes structural dividers from business charts. |
+| **Multimodal Vision RAG** | Gemini 1.5 Flash Vision | Prepares Base64 visual payloads for visual question answering on detected diagrams. |
 
 ---
 
-## System Architecture
+## 6. Agentic AI Architecture & Workflow
 
-The platform is architected across five distinct layers to guarantee separation of concerns, scalability, and security:
+The platform orchestrates document processing via LangGraph as a stateful, cyclic directed graph.
 
-```
-+----------------------------------------------------------------------------------------------------+
-| 1. PRESENTATION LAYER (React 19 + Vite)                                                            |
-|    - Dual-Mode Q&A Workspace (Single-Doc Target vs Multi-Doc Synthesis)                           |
-|    - Multi-Doc Scope Selector Bar (Interactive Chips, Select All, Clear All)                       |
-|    - Attributed Citations (Document Badges, Page Numbers, Evidence Pills, Relevance Scores)        |
-|    - Real-Time Dashboard, Document Inspection Modal, and Multimodal Visual Indicators             |
-+----------------------------------------------------------------------------------------------------+
-                                                 │ (HTTPS / REST API)
-                                                 ▼
-+----------------------------------------------------------------------------------------------------+
-| 2. API & PERIMETER SECURITY LAYER (FastAPI + ASGI Middleware)                                      |
-|    - Distributed Tracing: Pure ASGI RequestIDMiddleware (Validates / Generates X-Request-ID)      |
-|    - Zero-Leak Latency Logging: Structured millisecond timing (Redacts Auth, Passwords, Bodies)    |
-|    - In-Memory Bucket Rate Limiter: /auth/login (5/min), /auth/register (3/min)                    |
-|    - JWT Authentication: HMAC-SHA256 (>=32-char secret) with JTI Blacklist (/auth/logout)          |
-|    - Role-Based Access Control (RBAC): 'user' and 'admin' roles with dedicated admin APIs          |
-|    - Multi-Tenant Isolation: Strict scoping by current_user.id (HTTP 403 on tenant violations)    |
-+----------------------------------------------------------------------------------------------------+
-                                                 │
-                                                 ▼
-+----------------------------------------------------------------------------------------------------+
-| 3. MULTIMODAL INGESTION & PROCESSING LAYER                                                         |
-|    - PyMuPDF Native Text Parser: Structural order extraction & page boundary isolation            |
-|    - PaddleOCR Scanned Page Router: Density analysis, bounding-box coverage, text deduplication    |
-|    - Table Extraction Engine: PyMuPDF find_tables(), Markdown formatting, page continuity markers  |
-|    - Visual Element Detector: Identifies charts, diagrams, drawings; prepares Gemini Vision payload|
-+----------------------------------------------------------------------------------------------------+
-                                                 │
-                                                 ▼
-+----------------------------------------------------------------------------------------------------+
-| 4. AGENTIC AI REASONING LAYER (LangGraph Cyclic State Graph)                                       |
-|    - Document Intake Agent ──► Ingestion validation & metadata normalization                       |
-|    - Classification Agent  ──► Identifies document category (Contract, Invoice, Report, Resume)   |
-|    - Extraction Agent      ──► Structured entities, key-value pairs, dates, financial amounts      |
-|    - Analysis Agent        ──► Executive summary, risk factors, financial health signals           |
-|    - Supervisor Agent      ──► Evaluates quality, enforces retry cap (max 2), escalates failures   |
-|    - Verification Agent    ──► Verifies schema completeness, sets final verification status        |
-|    - Multi-Doc Synthesis   ──► Cross-document comparative reasoning & multi-source attribution     |
-+----------------------------------------------------------------------------------------------------+
-                                                 │
-                                                 ▼
-+----------------------------------------------------------------------------------------------------+
-| 5. PERSISTENCE & DATA-AT-REST SECURITY LAYER                                                       |
-|    - Authenticated Encryption at Rest: Fernet (AES-128-CBC + HMAC-SHA256) via EncryptedText        |
-|      (Encrypted columns: extracted_text, analysis, agent_trace, question, answer)                  |
-|    - Dynamic Database Engine: SQLite (Local Dev) / PostgreSQL 16 with Pool Pre-Ping (Production)   |
-|    - MLOps Telemetry: MLflow tracking for runs, parameters, metrics, and document metadata         |
-+----------------------------------------------------------------------------------------------------+
-```
+### The 7 Specialized Agents
 
-### System Architecture Flowchart
+1. **Document Intake Agent (`document`):** Validates uploaded file dimensions, MIME type, and page count; initializes state and telemetry logs.
+2. **Classification Agent (`classification`):** Analyzes text and layout structure to classify the document into enterprise categories: `Contract`, `Invoice`, `Financial Report`, `Technical Specification`, or `Resume`.
+3. **Extraction Agent (`extraction`):** Extracts key-value pairs, dates, currencies, party names, line items, and structural Markdown tables.
+4. **Analysis Agent (`analysis`):** Generates an executive summary, detects financial health signals, identifies compliance risks, and compiles operational metadata.
+5. **Supervisor Agent (`supervisor`):** Acts as the orchestrator and quality gatekeeper. Evaluates extraction completeness and consistency. If critical data is missing and retries are under the threshold (`retries < 2`), it routes execution back to the Extraction Agent. If retries reach 2, it halts the loop and escalates to Verification with `status="needs_review"`.
+6. **Verification Agent (`verification`):** Validates the final document state against the Pydantic schema, records execution duration in `agent_metrics`, and flags the document as `verified` or `needs_review`.
+7. **Multi-Document Synthesis Agent (`multi_doc_qa`):** Operates on demand during multi-document Q&A. Collects candidate passages across multiple files, identifies cross-document correlations and discrepancies, and formats synthesized comparative answers.
+
+### LangGraph Agent State Machine
 
 ```mermaid
 flowchart TD
-    subgraph UI["Presentation Layer (React 19 + Vite)"]
-        A["User Upload / Query"] --> B["Dual-Mode Q&A UI"]
+    Start([Upload Document]) --> Intake[Document Intake Agent]
+    Intake --> Classify[Classification Agent]
+    Classify --> Extract[Extraction Agent]
+    Extract --> Analyze[Analysis Agent]
+    Analyze --> Supervisor{Supervisor Agent<br/>Quality Gate}
+    Supervisor -- "Incomplete & Retries < 2" --> Extract
+    Supervisor -- "Complete OR Retries >= 2" --> Verify[Verification Agent]
+    Verify --> DB[(Save to Encrypted SQLite DB)]
+    DB --> Complete([Processing Complete])
+```
+
+---
+
+## 7. System Architecture
+
+The platform follows a clean, decoupled 5-tier architecture:
+
+```mermaid
+flowchart TD
+    subgraph UI["1. Presentation Layer (Vercel)"]
+        A["React 19 + Vite SPA"] --> B["Dual-Mode Q&A UI"]
         B --> B1["Single Document Mode"]
         B --> B2["Multi-Document Synthesis"]
     end
 
-    subgraph API["API & Security Layer (FastAPI)"]
+    subgraph API["2. Perimeter & Security Layer (Render)"]
         C["Pure ASGI RequestIDMiddleware"] --> D["Rate Limiter (5/min login, 3/min register)"]
         D --> E["JWT Auth & JTI Blacklist Verification"]
         E --> F["Multi-Tenant Boundary Guard (Ownership Verification)"]
     end
 
-    subgraph MULTIMODAL["Multimodal Ingestion Pipeline"]
+    subgraph MULTIMODAL["3. Multimodal Ingestion Pipeline"]
         G["File Validator (10MB, 100 Pages)"] --> H{"Content Type"}
-        H -- "Native Text" --> I["PyMuPDF Parser"]
+        H -- "Digital Text" --> I["PyMuPDF Parser"]
         H -- "Scanned / Image" --> J["PaddleOCR Engine"]
-        H -- "Tables & Charts" --> K["Table Extractor & Visual Detector"]
+        H -- "Tables & Diagrams" --> K["Table Extractor & Visual Detector"]
     end
 
-    subgraph AGENTS["LangGraph Multi-Agent Orchestration"]
+    subgraph AGENTS["4. LangGraph Multi-Agent Orchestration"]
         L["Document Agent"] --> M["Classification Agent"]
         M --> N["Extraction Agent"]
         N --> O["Analysis Agent"]
         O --> P{"Supervisor Agent"}
         P -- "Retry < 2" --> N
-        P -- "Retry >= 2 / Success" --> Q["Verification Agent"]
+        P -- "Retry >= 2 / Pass" --> Q["Verification Agent"]
     end
 
-    subgraph RAG["Grounded Q&A & Synthesis Engine"]
-        R["Intent Classifier & Query Expander"]
-        S["Passage Chunking & Scoring"]
-        T{"Gemini Configured?"}
-        T -- "Yes" --> U["Gemini 1.5 Flash (Generative Synthesis)"]
-        T -- "No / Offline" --> V["Extractive Fallback Engine (No Headers / Metadata)"]
-        W["Attributed Citations Generator"]
-    end
-
-    subgraph DATA["Persistence & Security at Rest"]
-        X["Fernet Authenticated Encryption (AES-128-CBC)"]
-        Y[("PostgreSQL 16 / SQLite Engine")]
-        Z["MLflow Telemetry Tracking"]
+    subgraph RAG["5. Grounded Q&A & Persistence"]
+        R["Intent Classifier & Query Expander"] --> S["Passage Chunking & Scoring"]
+        S --> T{"Gemini API Key?"}
+        T -- "Configured" --> U["Gemini 1.5 Flash (Generative)"]
+        T -- "Unconfigured / Offline" --> V["Extractive Fallback Engine"]
+        U --> W["Attributed Citations Generator"]
+        V --> W
+        W --> X[("SQLite (docuai.db)<br/>Fernet Authenticated Encryption")]
+        AGENTS --> X
     end
 
     UI --> API
     API --> MULTIMODAL
     MULTIMODAL --> AGENTS
-    AGENTS --> DATA
     API --> RAG
-    RAG --> DATA
 ```
 
 ### End-to-End Processing Sequence Diagram
@@ -262,520 +214,388 @@ flowchart TD
 sequenceDiagram
     autonumber
     actor User as User / Client
-    participant UI as React Frontend
-    participant API as FastAPI Backend
+    participant UI as React Frontend (Vercel)
+    participant API as FastAPI Backend (Render)
     participant Pipe as Multimodal Ingestion
     participant Graph as LangGraph Multi-Agent
     participant QA as RAG & QA Service
-    participant DB as Encrypted Database
+    participant DB as SQLite DB (Fernet Encrypted)
 
     User->>UI: Upload Document (PDF / Image)
-    UI->>API: POST /upload (with Bearer Token & X-Request-ID)
-    API->>API: Verify Token & JTI Revocation Status
-    API->>Pipe: Validate file size (<=10MB) & page ceiling (<=100)
-    Pipe->>Pipe: PyMuPDF Text + PaddleOCR (if scanned) + Tables + Charts
+    UI->>API: POST /upload (Bearer Token + X-Request-ID)
+    API->>API: Authenticate & Validate Token (JTI Check)
+    API->>Pipe: Validate Size (<=10MB) & Page Count (<=100)
+    Pipe->>Pipe: PyMuPDF Text + PaddleOCR (if scanned) + Tables
     Pipe->>Graph: Initiate DocumentState
     Graph->>Graph: Classify -> Extract -> Analyze
     Graph->>Graph: Supervisor checks completeness (max 2 retries)
-    Graph->>Graph: Verification agent sets final status & metrics
+    Graph->>Graph: Verification Agent validates schema & metrics
     Graph->>DB: Write Record (Fernet encrypts text, analysis, traces)
     DB-->>API: Document ID & Status
-    API-->>UI: HTTP 200 (Document Processed & Verified)
+    API-->>UI: HTTP 200 (Document Processed)
 
     User->>UI: Submit Question (Single or Multi-Document)
     UI->>API: POST /documents/{id}/qa OR /documents/multi-qa
     API->>API: Verify Ownership of All Specified Document IDs
-    alt Cross-User Unauthorized ID Detected
+    alt Unauthorized Document ID Detected
         API-->>UI: HTTP 403 Forbidden (Log CROSS_USER_ACCESS_DENIED)
     else Authorized Ownership Confirmed
         API->>QA: Retrieve Passages & Classify Intent
-        QA->>QA: Filter layout headers/metadata (is_header_or_metadata)
+        QA->>QA: Strip layout headers & page markers
         alt Gemini API Key Available
             QA->>QA: Generative Synthesis (Gemini 1.5 Flash)
         else Offline / Unconfigured Key
-            QA->>QA: High-Precision Extractive Fallback Engine
+            QA->>QA: Multi-Sentence Extractive Fallback Engine
         end
-        QA->>DB: Store Turn in QAHistory / MultiDocQAHistory (Encrypted)
+        QA->>DB: Store Turn in QAHistory (Encrypted at rest)
         QA-->>API: Grounded Answer + Citations + Consulted Docs
         API-->>UI: HTTP 200 Answer Payload
-        UI-->>User: Render Answer with Badges, Citations, & Evidence Pills
+        UI-->>User: Render Answer with Badges & Citations
     end
 ```
 
 ---
 
-## Seven Development Phases
+## 8. Technology Stack
 
-The project was executed through seven structured, sequentially verified development phases, followed by a dedicated post-phase pipeline remediation:
-
-```
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 1: Core Document Intake, Multi-Agent Architecture, and MLOps                                │
-│ - PyMuPDF parsing, PaddleOCR integration, LangGraph baseline, MLflow tracking.                    │
-└──────────────────────────────────────────────────┬────────────────────────────────────────────────┘
-                                                   ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 2: Advanced Enterprise Security, Encryption at Rest, and RBAC                               │
-│ - Fernet field-level encryption, JWT revocation blacklist, sliding rate limiter, RBAC.            │
-└──────────────────────────────────────────────────┬────────────────────────────────────────────────┘
-                                                   ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 3: Generative AI Q&A Enhancement and Grounded Retrieval                                     │
-│ - Google Gemini provider, TF-IDF passage chunking, prompt injection guardrails, citations.        │
-└──────────────────────────────────────────────────┬────────────────────────────────────────────────┘
-                                                   ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 4: Advanced Multimodal Document Understanding (Tables, Charts, Mixed OCR)                   │
-│ - Mixed-content OCR deduplication, PyMuPDF Markdown table extraction, chart/diagram detector.    │
-└──────────────────────────────────────────────────┬────────────────────────────────────────────────┘
-                                                   ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 5: Advanced Agentic Intelligence and Cross-Document Retrieval                               │
-│ - Supervisor retry limits (cap=2), agent execution telemetry, multi-document synthesis backend.   │
-└──────────────────────────────────────────────────┬────────────────────────────────────────────────┘
-                                                   ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 6: Enterprise Deployment, Observability, and Scalability                                    │
-│ - Docker Compose, PostgreSQL 16 pooling, pure ASGI RequestIDMiddleware, zero-leak latency logs.  │
-└──────────────────────────────────────────────────┬────────────────────────────────────────────────┘
-                                                   ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 7: Final Integration, Dual-Mode Frontend, and Acceptance                                    │
-│ - Dual-mode UI (Single vs Multi-Doc), document selection chips, consulted pills, Vite build.      │
-└──────────────────────────────────────────────────┬────────────────────────────────────────────────┘
-                                                   ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Post-Phase Remediation: PDF QA Pipeline & Extractive Fallback Remediation                         │
-│ - Header/layout filtering, concept overlap scoring, multi-sentence extractive fallback.          │
-└───────────────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Phase 1: Core Document Intake, Multi-Agent Architecture, and MLOps
-- Built the foundational FastAPI application supporting file upload validation (10 MB size limit, 100-page limit, MIME type checks).
-- Implemented hybrid text ingestion combining native digital PyMuPDF extraction with PaddleOCR for scanned documents.
-- Established the initial LangGraph agent state graph coordinating Document, Classification, Extraction, Analysis, and Verification agents.
-- Integrated MLflow to log run parameters, document classification tags, word counts, and agent execution times.
-
-### Phase 2: Advanced Enterprise Security, Encryption at Rest, and RBAC
-- Built authenticated field-level encryption at rest using Fernet (AES-128-CBC + HMAC-SHA256) via a custom SQLAlchemy `EncryptedText` TypeDecorator, encrypting sensitive fields (`extracted_text`, `analysis`, `agent_trace`).
-- Developed JWT authentication enforcing a minimum 32-character secret key and created a database-backed `RevokedToken` blacklist (`POST /auth/logout`) tracking JTI claims.
-- Implemented an IP-isolated sliding-window rate limiter protecting `/auth/login` (5/min) and `/auth/register` (3/min).
-- Introduced Role-Based Access Control (RBAC) with `user` and `admin` roles, providing administrative endpoints for user management and telemetry (`/admin/users`, `/admin/stats`).
-
-### Phase 3: Generative AI Q&A Enhancement and Grounded Retrieval
-- Implemented an HTTP-based Google Gemini provider supporting Gemini 1.5 Flash with exponential backoff retries.
-- Created passage-level retrieval segmenting document text into overlapping windows (~900 characters with 150-character overlap) respecting page boundaries.
-- Designed prompt injection defense wrapping untrusted document context inside `<document_context>` XML boundaries.
-- Built a citation attribution engine deriving citations strictly from retrieved passages, with clean abstention when evidence is insufficient.
-
-### Phase 4: Advanced Multimodal Document Understanding
-- Solved mixed-content PDF extraction by calculating bounding-box coverage of native text versus embedded images, routing image regions to PaddleOCR and deduplicating text.
-- Implemented table extraction via PyMuPDF `find_tables()`, converting raw table cells into formatted Markdown tables with row/column alignment and multi-page continuation headers.
-- Created a visual element detection engine distinguishing structural lines and layout borders from meaningful charts and diagrams.
-- Prepared Base64 image payloads for multimodal Gemini Vision reasoning.
-
-### Phase 5: Advanced Agentic Intelligence and Cross-Document Retrieval
-- Hardened the LangGraph Supervisor Agent with explicit retry boundaries (`retry_counts["extraction"] < 2`), preventing infinite execution loops and escalating unresolved failures to `needs_review`.
-- Extended the state schema with `agent_metrics` to record per-agent execution duration, timestamps, and status.
-- Built word-boundary regex intent classification (`financial`, `comparison`, `tabular`, `visual`, `summary`, `factual`) preventing false substring collisions.
-- Developed domain synonym and acronym expansion to enhance retrieval recall.
-- Engineered the cross-document intelligence engine (`POST /documents/multi-qa`, `GET /documents/multi-qa/history`) supporting synthesis across multiple owned files with strict cross-user access denial (HTTP 403 + `CROSS_USER_ACCESS_DENIED` audit logging).
-
-### Phase 6: Enterprise Deployment, Observability, and Scalability
-- Containerized the platform using a production-ready `Dockerfile` (Python 3.11-slim) and `docker-compose.yml` coordinating the backend and a PostgreSQL 16 database.
-- Implemented dynamic database pooling in SQLAlchemy (`pool_pre_ping=True`, `pool_size=5`, `max_overflow=10`, `pool_timeout=30`).
-- Engineered a pure ASGI `RequestIDMiddleware` validating incoming client `X-Request-ID` headers against `^[a-zA-Z0-9\-_]{1,64}$` or generating UUID4 fallbacks.
-- Built zero-leak latency logging recording request duration in milliseconds while strictly redacting authorization tokens, passwords, cookies, and document bodies.
-
-### Phase 7: Final Integration, Dual-Mode Frontend, and Acceptance
-- Upgraded the React Q&A workspace (`frontend/src/views/AskView.jsx`) to a dual-mode interface: Single Document Q&A and Multi-Document Synthesis.
-- Built interactive multi-document selection chips with **Select All** and **Clear All** controls and real-time selection counters.
-- Designed rich citation cards displaying source document badges (`📄 filename.pdf` or `Doc #id`), page numbers, evidence types, and retrieval relevance scores.
-- Implemented visual **Documents Consulted** indicators rendering badges for all files referenced in multi-document synthesis turns.
-- Verified frontend production compilation using Vite with zero errors and zero warnings.
-
-### Post-Phase Remediation: PDF QA Pipeline & Extractive Fallback Remediation
-- Diagnosed and resolved an issue where extractive fallback returned layout headers or page numbers (e.g., `Page 1 - Overview - Introduction.`) when `GEMINI_API_KEY` was not configured.
-- Added comprehensive layout and header filtration (`is_header_or_metadata`, `clean_passage_text`, `get_substantive_sentences`) to strip running headers, page markers, and title fragments.
-- Implemented conceptual overlap scoring and query intent routing, delivering coherent multi-sentence answers for factual, definition, summary, and comparative inquiries across single and multi-document modes.
-- Authoring 13 dedicated unit and integration tests (`backend/tests/test_qa_pipeline_remediation.py`), bringing the full test suite to 128 passing tests.
-
----
-
-## Agentic AI Workflow
-
-The platform orchestrates document analysis using LangGraph, modeling the workflow as a stateful, cyclic directed graph.
-
-### The 7 Specialized Agents
-
-1. **Document Intake Agent (`document`):** Validates uploaded file dimensions, MIME type, and page count; initializes the execution state and telemetry logs.
-2. **Classification Agent (`classification`):** Analyzes the text and layout structure to classify the document into enterprise categories: `Contract`, `Invoice`, `Financial Report`, `Technical Specification`, or `Resume`.
-3. **Extraction Agent (`extraction`):** Extracts key-value pairs, dates, currencies, party names, line items, and structural Markdown tables.
-4. **Analysis Agent (`analysis`):** Generates an executive summary, detects financial health signals, identifies compliance risks, and compiles operational metadata.
-5. **Supervisor Agent (`supervisor`):** Acts as the orchestrator and quality gatekeeper. Evaluates extraction completeness and consistency. If critical data is missing and retries are under the threshold (`retries < 2`), it increments `retry_counts["extraction"]` and routes execution back to the Extraction Agent. If retries reach 2, it halts the loop and escalates to Verification with `status="needs_review"`.
-6. **Verification Agent (`verification`):** Validates the final document state against the Pydantic schema, records execution duration in `agent_metrics`, and flags the document as `verified` or `needs_review`.
-7. **Multi-Document Synthesis Agent (`multi_doc_qa`):** Operates on demand during multi-document Q&A. Collects candidate passages across multiple files, identifies cross-document correlations and discrepancies, and formats synthesized comparative answers.
-
-### LangGraph State Schema (`DocumentState`)
-
-```python
-class DocumentState(TypedDict):
-    document_id: int
-    filename: str
-    file_type: str
-    file_size: int
-    page_count: int
-    raw_text: str
-    cleaned_text: str
-    tables: List[Dict[str, Any]]
-    charts: List[Dict[str, Any]]
-    classification: Dict[str, Any]
-    extracted_data: Dict[str, Any]
-    analysis: Dict[str, Any]
-    verification: Dict[str, Any]
-    status: str                         # "processed", "verified", "needs_review", "failed"
-    agent_trace: List[Dict[str, Any]]
-    agent_metrics: Dict[str, Dict[str, Any]]  # Per-agent execution duration & status
-    retry_counts: Dict[str, int]        # e.g., {"extraction": 1} (strictly capped at 2)
-```
-
----
-
-## Multimodal Document Processing
-
-Enterprise documents frequently combine native text, scanned receipts, complex tables, and diagrams. The platform employs a specialized multimodal processing pipeline:
-
-### 1. Mixed-Content PDF Parsing & OCR
-- **PyMuPDF Extraction:** Directly extracts font-encoded text and spatial coordinates with near-zero latency.
-- **Scanned Page Detection:** Computes the character density and image area coverage per page. Pages with low text density (< 50 characters) or high image coverage (> 50% page area) are automatically flagged as scanned.
-- **PaddleOCR Routing:** Scanned pages and embedded raster images are rendered at 300 DPI and processed through PaddleOCR.
-- **Bounding-Box Deduplication:** When a page contains both digital text and OCR-extracted text, bounding-box intersection calculations prevent duplicate sentences from entering the passage index.
-
-### 2. High-Precision Table Extraction
-- **Boundary Detection:** Uses PyMuPDF `Page.find_tables()` to detect horizontal and vertical grid lines, cell intersections, and header rows.
-- **Markdown Conversion:** Transforms extracted cells into clean GitHub Flavored Markdown tables:
-  ```markdown
-  | Fiscal Quarter | Gross Revenue | Operating Expenses | Net Margin |
-  | :--- | :--- | :--- | :--- |
-  | Q1 2024 | $12.4M | $8.1M | 34.6% |
-  | Q2 2024 | $14.2M | $8.9M | 37.3% |
-  ```
-- **Page Continuity:** Tables spanning multiple pages are linked using continuous page index markers (`[Table 1 - Page 2 Continued]`).
-
-### 3. Visual Element & Chart Detection
-- **Vector Graphic Analysis:** Inspects drawing commands (curves, rectangles, line segments). Distinguishes cosmetic borders and dividing rules from complex graphical plots.
-- **Chart Classification:** Elements with multi-axis paths, legends, or clustered labels are categorized as charts/diagrams (`bar_chart`, `line_graph`, `flowchart`, `architecture_diagram`).
-- **Vision Payload Preparation:** High-resolution crops of detected visual regions are Base64-encoded to enable multimodal reasoning with Google Gemini Vision.
-
----
-
-## RAG and PDF Question Answering
-
-The Retrieval-Augmented Generation (RAG) engine powers both Single Document Q&A and Multi-Document Synthesis.
-
-### 1. Passage Segmentation & Indexing
-- Documents are segmented into overlapping text passages of approximately 900 characters with 150-character overlaps.
-- Chunk boundaries strictly respect page breaks, guaranteeing that every retrieved passage maps to an exact `page_number`.
-- Extracted Markdown tables and chart descriptions are indexed as dedicated passages with their corresponding `evidence_type` (`table`, `chart`, `ocr`, `text`).
-
-### 2. Query Intent Classification & Synonym Expansion
-- **Token-Boundary Intent Classifier:** Analyzes incoming questions using regex word boundaries (`\b\w+\b`) to detect:
-  - `financial`: `amount`, `total`, `revenue`, `cost`, `budget`, `profit`, `margin`
-  - `comparison`: `compare`, `difference`, `versus`, `vs`, `between`, `contrast`
-  - `tabular`: `table`, `column`, `row`, `matrix`, `breakdown`, `grid`
-  - `visual`: `chart`, `graph`, `diagram`, `trend`, `figure`, `plot`
-  - `summary`: `summary`, `summarize`, `overview`, `key findings`, `main points`
-  - `factual`: General informational inquiries
-- **Domain Synonym Expansion:** Expands financial, technical, and operational terms (e.g., `revenue` $\rightarrow$ `sales, turnover, income`; `profit` $\rightarrow$ `margin, earnings, net income`; `expenses` $\rightarrow$ `spending, expenditure`).
-
-### 3. Layout & Metadata Filtration
-To prevent running headers, section titles, and page indicators from being selected as answers or citation quotes, the engine applies multi-stage filtering:
-- `PAGE_HEADER_FOOTER_REGEX`: Strips layout tags like `Page 1 - Overview`, `Page 1 of 10`, `--- Page 2 ---`, and `[Table ...]`.
-- `is_header_or_metadata(sentence)`: Identifies and rejects sentence candidates lacking substantive predicates or full narrative clauses.
-- `clean_passage_text(text)`: Removes layout noise while fully preserving Markdown tables and explanatory prose.
-
-### 4. Dual-Engine Generation & Fallback Architecture
-
-```
-                          Incoming Query & Retrieved Passages
-                                          │
-                                          ▼
-                       Does GEMINI_API_KEY exist in .env?
-                                    /           \
-                             Yes   /             \   No / Offline
-                                  ▼               ▼
-                   [Gemini 1.5 Flash Provider]   [Extractive Fallback Engine]
-                   - XML Context Isolation       - Intent-Specific Synthesis
-                   - Natural Language Synthesis  - Coherent Multi-Sentence Assembly
-                   - Verbatim Retrieved Quotes   - Direct Passage Grounding
-                   - answer_mode: "generative"   - answer_mode: "retrieval_fallback"
-                                  \               /
-                                   \             /
-                                    ▼           ▼
-                           Final Attributed Response
-                           - Grounded Answer Text
-                           - Page & Document Badges
-                           - Evidence Type & Relevance Scores
-                           - Documents Consulted Pills
-```
-
-- **Generative Mode (`answer_mode="generative"`):** When `GEMINI_API_KEY` is provisioned, the prompt is wrapped in `<document_context>` XML boundaries. Gemini 1.5 Flash generates comprehensive natural-language answers citing specific evidence passages.
-- **Extractive Fallback Mode (`answer_mode="retrieval_fallback"`):** When offline or unconfigured, the fallback engine constructs complete, multi-sentence answers directly from the highest-scoring substantive passages. It handles factual questions, definitions, multi-sentence summaries, and comparative queries without generative hallucination.
-- **Honest Abstention:** When the retrieved passages do not contain sufficient evidence to answer the user's question, both engines return:
-  > *"The document does not contain enough evidence to answer this question."*  
-  with zero citations, preventing misleading outputs.
-
-### 5. Multi-Document Synthesis (`POST /documents/multi-qa`)
-- Accepts a list of document IDs (`document_ids: [1, 2, 4]`) and a user query.
-- Validates that every document ID exists and is owned by `current_user.id`.
-- Segments and ranks passages across all selected documents.
-- In generative mode, formats a `<multi_document_context>` grouped by Document ID and Filename. In extractive mode, extracts substantive evidence sentences per document formatted as:
-  `- In **{filename}** (page {num}): {substantive_finding}`
-- Emits citations containing the source `document_id` and `filename`, alongside an array of `documents_consulted`.
-
----
-
-## Security Implementation
-
-The platform implements a multi-layered defense-in-depth security model:
-
-```
-+-----------------------------------------------------------------------------------+
-| 1. PERIMETER & NETWORK SECURITY                                                   |
-|    - CORS origin whitelisting with credentials support                            |
-|    - Pure ASGI RequestIDMiddleware with alphanumeric/hyphen sanitization          |
-|    - Zero-leak structured latency logging (strictly redacts tokens, bodies, keys)  |
-+-----------------------------------------------------------------------------------+
-                                         │
-                                         ▼
-+-----------------------------------------------------------------------------------+
-| 2. RATE LIMITING & DOS MITIGATION                                                 |
-|    - Sliding-window in-memory bucket limiter: /auth/login (5/min), register (3/min)|
-|    - Strict upload ceilings: 10 MB file size limit, 100 PDF page maximum          |
-|    - LangGraph supervisor retry cap: Maximum 2 retries before forced escalation   |
-+-----------------------------------------------------------------------------------+
-                                         │
-                                         ▼
-+-----------------------------------------------------------------------------------+
-| 3. IDENTITY, AUTHENTICATION & ACCESS CONTROL (IAM)                                |
-|    - Cryptographically strong JWT keys (minimum 32 characters, validated at boot) |
-|    - JTI claim tracking with RevokedToken database blacklist (/auth/logout)       |
-|    - Bcrypt password hashing with unique per-user cryptographic salts             |
-|    - Role-Based Access Control (RBAC): 'user' and 'admin' roles                   |
-+-----------------------------------------------------------------------------------+
-                                         │
-                                         ▼
-+-----------------------------------------------------------------------------------+
-| 4. STRICT MULTI-TENANT ISOLATION                                                  |
-|    - Document queries strictly scoped by Document.user_id == current_user.id      |
-|    - Single Q&A returns HTTP 404 / 403 on unowned documents                       |
-|    - Multi-Doc Q&A verifies ownership across all IDs; returns HTTP 403 on breach  |
-|    - Logs CROSS_USER_ACCESS_DENIED audit events for tenant violation attempts     |
-+-----------------------------------------------------------------------------------+
-                                         │
-                                         ▼
-+-----------------------------------------------------------------------------------+
-| 5. GENAI & PROMPT INJECTION DEFENSE                                               |
-|    - Untrusted document context strictly encapsulated in <document_context> XML   |
-|    - Clean abstention when evidence is insufficient                               |
-|    - Citations derived strictly from retrieved passages (prevents model spoofing) |
-+-----------------------------------------------------------------------------------+
-                                         │
-                                         ▼
-+-----------------------------------------------------------------------------------+
-| 6. DATA AT REST ENCRYPTION & AUDIT LOGGING                                        |
-|    - Authenticated encryption at rest (Fernet AES-128-CBC + HMAC-SHA256)          |
-|    - Encrypted columns: extracted_text, analysis, agent_trace, question, answer   |
-|    - Immutable audit log tracking user ID, IP address, event type, and timestamp  |
-+-----------------------------------------------------------------------------------+
-```
-
-### 1. Authenticated Field-Level Encryption at Rest
-- Sensitive database fields are protected using Fernet encryption (AES-128-CBC with PKCS7 padding and HMAC-SHA256 authentication).
-- Implemented as a transparent SQLAlchemy `TypeDecorator` (`EncryptedText`). When saving to the database, plaintext is encrypted into a base64 ciphertext token (`gAAAAA...`). When loading from the database, the token is verified and decrypted.
-- Inspecting the raw database file (`docuai.db`) confirms that sensitive document text, executive summaries, agent traces, and Q&A transcripts are 100% encrypted.
-- Enforces cryptographic separation: `DOCUMENT_ENCRYPTION_KEY` must be completely distinct from `JWT_SECRET_KEY`.
-
-### 2. Token Revocation Blacklist (`POST /auth/logout`)
-- Every issued JWT token includes a unique `jti` (JWT ID) UUID claim.
-- When a user logs out, the token's JTI and its expiration timestamp are recorded in the `RevokedToken` database table.
-- The authentication dependency checks the blacklist on every authenticated request. Revoked tokens are immediately rejected with HTTP 401 Unauthorized.
-
-### 3. Multi-Tenant Cross-User Isolation
-- All database queries filter strictly by `user_id == current_user.id`.
-- Single-document queries for another user's document return HTTP 404 Not Found, preventing user enumeration.
-- Multi-document queries (`POST /documents/multi-qa`) validate every document ID in the requested array. If any document belongs to another user:
-  - The request is immediately aborted with HTTP 403 Forbidden.
-  - A `CROSS_USER_ACCESS_DENIED` event is written to the immutable audit log recording the offending user ID, IP address, and requested document IDs.
-
-### 4. Zero-Leak Request Latency Logging
-- Implemented in `backend/main.py`. Records every incoming request with:
-  - Method, Path, Status Code, Duration (ms), and Client IP.
-- Strictly redacts all authorization headers, Bearer tokens, passwords, cookies, query parameters, and request/response bodies.
-
----
-
-## Database Design
-
-The platform uses SQLAlchemy ORM with support for both SQLite (local development) and PostgreSQL 16 (production container).
-
-### Entity-Relationship Diagram
-
-```mermaid
-erDiagram
-    User ||--o{ Document : "owns"
-    User ||--o{ QAHistory : "submits"
-    User ||--o{ MultiDocQAHistory : "submits"
-    User ||--o{ AuditEvent : "triggers"
-    Document ||--o{ QAHistory : "references"
-
-    User {
-        int id PK
-        string email UK
-        string hashed_password
-        string full_name
-        string role "user | admin"
-        boolean is_active
-        datetime created_at
-    }
-
-    Document {
-        int id PK
-        int user_id FK
-        string filename
-        string file_type
-        int file_size
-        int page_count
-        string status "processed | verified | needs_review | failed"
-        EncryptedText extracted_text "Fernet Encrypted"
-        EncryptedText analysis "Fernet Encrypted"
-        EncryptedText agent_trace "Fernet Encrypted"
-        text tables "JSON Markdown Tables"
-        text charts "JSON Visual Elements"
-        datetime created_at
-    }
-
-    QAHistory {
-        int id PK
-        int document_id FK
-        int user_id FK
-        EncryptedText question "Fernet Encrypted"
-        EncryptedText answer "Fernet Encrypted"
-        text citations "JSON Citations"
-        datetime created_at
-    }
-
-    MultiDocQAHistory {
-        int id PK
-        int user_id FK
-        text document_ids "JSON Array of IDs"
-        EncryptedText question "Fernet Encrypted"
-        EncryptedText answer "Fernet Encrypted"
-        text citations "JSON Citations"
-        text documents_consulted "JSON Array"
-        datetime created_at
-    }
-
-    RevokedToken {
-        int id PK
-        string jti UK
-        datetime revoked_at
-        datetime expires_at
-    }
-
-    AuditEvent {
-        int id PK
-        int user_id FK
-        string event_type
-        text details "JSON Details"
-        string ip_address
-        datetime created_at
-    }
-```
-
-### Table Schemas & Encryption Mapping
-
-| Model Name | Table Name | Key Columns | Encrypted Fields (Fernet AES-128-CBC) |
+| Layer | Component | Specification | Purpose |
 | :--- | :--- | :--- | :--- |
-| `User` | `users` | `id`, `email`, `hashed_password`, `role`, `is_active` | None (password hashed via bcrypt) |
-| `Document` | `documents` | `id`, `user_id`, `filename`, `file_type`, `status` | `extracted_text`, `analysis`, `agent_trace` |
-| `QAHistory` | `qa_history` | `id`, `document_id`, `user_id`, `citations` | `question`, `answer` |
-| `MultiDocQAHistory` | `multi_doc_qa_history` | `id`, `user_id`, `document_ids`, `citations`, `documents_consulted` | `question`, `answer` |
-| `RevokedToken` | `revoked_tokens` | `id`, `jti`, `revoked_at`, `expires_at` | None |
-| `AuditEvent` | `audit_events` | `id`, `user_id`, `event_type`, `ip_address`, `created_at` | None |
-
-### Connection Pooling Configuration (`backend/database/database.py`)
-- **`pool_pre_ping=True`:** Tests socket vitality before issuing queries, transparently recycling disconnected connections.
-- **`pool_size=5`:** Base pool of persistent database connections per worker process.
-- **`max_overflow=10`:** Allows up to 15 concurrent transactions during peak bursts.
-- **`pool_timeout=30`:** Maximum seconds a worker waits for an available pool slot before failing safely.
+| **Frontend** | React | 19.x | Component-based modern user interface |
+| | Vite | 8.2.x | High-speed frontend build tool and bundler |
+| | Vanilla CSS | Modern CSS3 | Responsive design, glassmorphism UI, chips, badges |
+| | Axios | 1.x | HTTP client with auth interceptors & request headers |
+| **Backend & API** | Python | 3.11-slim | Core programming language runtime |
+| | FastAPI | 0.110+ | Asynchronous high-performance REST API |
+| | Uvicorn | 0.52+ | ASGI web server with dynamic `$PORT` binding |
+| | Pydantic | v2 | Request/response data validation and schemas |
+| **Multimodal AI** | PyMuPDF (`fitz`) | 1.28.2 | PDF parsing, table extraction, vector layout analysis |
+| | PaddleOCR | 3.7.0 | Optical Character Recognition for scanned pages |
+| | OpenCV & Pillow | Latest | Image processing, geometry, and rendering |
+| **Agentic AI & LLM** | LangGraph | 1.2.11 | Cyclic multi-agent graph with supervisor retries |
+| | Google Gemini API | 1.5 Flash | Generative question answering & multimodal reasoning |
+| **Security & Auth** | Cryptography (Fernet) | 42.0+ | Authenticated AES-128-CBC + HMAC-SHA256 encryption |
+| | PyJWT | 2.8+ | JWT token generation, signature checks, and JTI claims |
+| | Bcrypt | 4.0+ | Password hashing with cryptographic salts |
+| **Persistence & MLOps** | SQLite | 3.x (`docuai.db`) | Active relational database with field encryption |
+| | SQLAlchemy | 2.0.52 | ORM, dynamic engine creation, and TypeDecorators |
+| | MLflow | 3.6.0 | Experiment tracking and run telemetry |
+| **Hosting & Cloud** | Vercel | Production | Frontend SPA hosting and continuous deployment |
+| | Render | Free Tier | Backend container hosting with dynamic `$PORT` |
+| | GitHub Packages | GHCR | Automated container image publishing |
 
 ---
 
-## API Endpoints
+## 9. Frontend Architecture
 
-All protected endpoints require a valid Bearer token passed in the `Authorization` header (`Bearer <token>`). Every request receives an `X-Request-ID` tracing header in the response.
+The frontend is a single-page application (SPA) built with React 19 and Vite.
 
-| HTTP Method | Route Endpoint | Description | Auth Tier | Rate Limit |
+### Key Architectural Concepts
+- **API Centralization (`frontend/src/services/api.js`):** Encapsulates all backend HTTP communications. Automatically reads the environment variable `VITE_API_URL` during build time. Includes request interceptors to inject `Authorization: Bearer <token>` and `X-Request-ID` headers.
+- **SPA Client-Side Routing:** Supported in production via [`frontend/vercel.json`](file:///D:/Enterprise%20Platform/frontend/vercel.json):
+  ```json
+  {
+    "rewrites": [
+      {
+        "source": "/(.*)",
+        "destination": "/index.html"
+      }
+    ]
+  }
+  ```
+  This ensures deep routes (e.g., `/ask`, `/dashboard`, `/login`) correctly load the SPA shell on hard browser refresh without returning HTTP 404.
+- **Dual-Mode Q&A Interface (`frontend/src/views/AskView.jsx`):**
+  - **Single Document Mode:** Focuses queries on an active document with page numbers and evidence pills (Table, Chart, Text, OCR).
+  - **Multi-Document Synthesis Mode:** Allows interactive selection of multiple documents using interactive toggle chips, with **Select All** and **Clear All** controls, selection counters, and cross-document attribution cards.
+
+---
+
+## 10. Backend Architecture
+
+The backend is built with FastAPI running on Python 3.11.
+
+### Structural Design
+- **Application Lifespan (`backend/main.py`):**
+  - Validates cryptographic configurations at boot (`JWT_SECRET_KEY` and `DOCUMENT_ENCRYPTION_KEY`).
+  - Initializes database tables non-destructively (`init_database()`).
+- **Middleware Pipeline:**
+  - `CORSMiddleware`: Whitelists permitted frontend origins, supporting credentials and exposing `X-Request-ID`.
+  - `RequestIDMiddleware`: Pure ASGI middleware that generates or sanitizes `X-Request-ID`, attaches it to response headers, and records structured request latency without logging sensitive request bodies or auth tokens.
+- **Modular Routers:**
+  - `/auth`: Registration, login, logout (token revocation), profile (`/auth/me`).
+  - `/admin`: User directory, role promotion, system metrics.
+  - `/upload` and `/documents`: Document intake, listing, retrieval by ID, and multi-tenant isolation.
+  - `/documents/{id}/qa` and `/documents/multi-qa`: Single and cross-document question answering.
+
+---
+
+## 11. Database Architecture — SQLite & Field-Level Encryption
+
+The platform retains **SQLite (`docuai.db`)** as its primary production and development database.
+
+### Why SQLite was Retained
+- Preserves all existing user accounts, document metadata, and historical Q&A interactions.
+- Avoids external database infrastructure costs and complex cloud database provisioning.
+- Single-instance transactional integrity: SQLite provides native ACID guarantees with zero networking overhead.
+
+### Field-Level Encryption at Rest (`EncryptedText`)
+Sensitive data is never stored in plaintext. In [`backend/database/models.py`](file:///D:/Enterprise%20Platform/backend/database/models.py), a custom SQLAlchemy `TypeDecorator` called `EncryptedText` automatically encrypts values using Fernet before writing to disk, and decrypts them when reading into memory:
+- **Encrypted Columns in `documents`:** `extracted_text`, `analysis`, `agent_trace`.
+- **Encrypted Columns in `qa_history`:** `question`, `answer`.
+- **Encrypted Columns in `multi_doc_qa_history`:** `question`, `answer`.
+
+### SQLite Single-Writer Property & Storage Note
+SQLite uses operating-system file locks. It is designed for single-process write access. When running in containerized environments (such as Render or Kubernetes), the backend must run as a single replica (`replicas: 1`). On the current Render Free tier, filesystem storage is ephemeral; data persists during active runtime but resets across container redeployments unless mounted to a persistent disk (`/var/data`).
+
+---
+
+## 12. Document Ingestion & Processing Pipeline
+
+1. **Upload Validation:** Enforces a 10 MB maximum file size limit, 100-page PDF ceiling, and allowed extensions (`.pdf`, `.jpg`, `.jpeg`, `.png`).
+2. **Path Sanitization:** Filenames are sanitized via `safe_filename()` to eliminate path traversal characters (`[^A-Za-z0-9._-]`), bounded to 180 characters, and assigned a unique UUID prefix:
+   `user_{user_id}_{uuid}_{filename}`.
+3. **Async Offloading:** Heavy CPU operations (PDF parsing and OCR) are offloaded to worker threads via `anyio.to_thread.run_sync()`, keeping FastAPI's async event loop completely unblocked.
+4. **Temporary File Cleanup:** Uploaded files are processed and unlinked immediately in a `finally` block:
+   ```python
+   finally:
+       if file_path.exists():
+           file_path.unlink()
+   ```
+
+---
+
+## 13. OCR & Text Extraction Workflow
+
+- **Digital Extraction:** PyMuPDF parses font glyphs, layout blocks, and reading flow.
+- **Scanned Page Density Analysis:** The pipeline evaluates character count and image area. If text density is below 50 characters or image area exceeds 50% of the page, the page is flagged for OCR.
+- **PaddleOCR Execution:** PaddleOCR extracts text and bounding boxes from scanned images.
+- **Bounding-Box Deduplication:** When a page has mixed digital and scanned content, bounding-box intersection algorithms deduplicate overlapping text to prevent redundant passages.
+- **Markdown Tables:** Tables detected via `find_tables()` are converted into clean GitHub Flavored Markdown with page continuation markers.
+
+---
+
+## 14. Retrieval-Augmented Generation (RAG)
+
+1. **Passage Chunking:** Documents are segmented into overlapping passages (~900 characters with 150-character overlap) strictly aligned with page boundaries.
+2. **Intent Classification:** Word-boundary regex tokenization identifies question intent (`financial`, `comparison`, `tabular`, `visual`, `summary`, `factual`) without substring collisions.
+3. **Domain Synonym Expansion:** Expands financial, technical, and executive terms (e.g., `revenue` $\leftrightarrow$ `sales, income, turnover`) to maximize passage recall.
+4. **Layout & Header Filtration:** Rejects running headers, page numbers, and title tags (`is_header_or_metadata()`) from being returned as answers or citations.
+
+---
+
+## 15. Question-Answering Workflow
+
+The platform implements a resilient dual-engine architecture:
+
+```
+                      User Question & Retrieved Passages
+                                      │
+                                      ▼
+                   Is GEMINI_API_KEY set in Environment?
+                               /                                      Yes   /                \   No / Offline
+                             ▼                  ▼
+             [Gemini 1.5 Flash Provider]    [Extractive Fallback Engine]
+             - Generative natural language  - Multi-sentence substantive prose
+             - XML context encapsulation    - Intent-specific sentence assembly
+             - Verbatim passage quotes      - Zero generative hallucination
+             - answer_mode: "generative"    - answer_mode: "retrieval_fallback"
+                             \                  /
+                              \                /
+                               ▼              ▼
+                         Attributed Response with Citations
+```
+
+- **Honest Abstention:** If no retrieved passage contains sufficient evidence, both engines return:
+  > *"The document does not contain enough evidence to answer this question."*  
+  with zero citations, preventing fabricated answers.
+
+---
+
+## 16. Multi-Document Intelligence
+
+Supported by actual backend code in [`backend/api/qa.py`](file:///D:/Enterprise%20Platform/backend/api/qa.py#L207-L320):
+- **Endpoint:** `POST /documents/multi-qa`
+- **Multi-Tenant Ownership Verification:** The endpoint verifies that every document ID in `document_ids` belongs to `current_user.id`. If any requested document belongs to another user, access is immediately rejected with HTTP 403 Forbidden and logged as `CROSS_USER_ACCESS_DENIED`.
+- **Cross-Document Synthesis:** Ranks candidate passages across all selected files, generating comparative answers that cite individual source files:
+  `- In **{filename}** (page {num}): {finding}`
+- **History Tracking:** Persisted in `MultiDocQAHistory` with encrypted question and answer fields.
+
+---
+
+## 17. Authentication & Authorization
+
+- **Password Security:** Bcrypt hashing with unique per-user cryptographic salts (`bcrypt.gensalt()`). Plaintext passwords are never saved.
+- **JWT Lifespan & Validation:** Tokens signed using HMAC-SHA256. `JWT_SECRET_KEY` must be at least 32 characters; insecure placeholders (`changeme`, `secret`, `admin`) trigger a startup failure.
+- **Server-Side Token Revocation:** `POST /auth/logout` records the token's unique `jti` in `RevokedToken`. Every request verifies that `jti` is not blacklisted.
+- **Role-Based Access Control (RBAC):** Distinct `user` and `admin` roles. Management routes under `/admin/` enforce the `require_admin` dependency.
+- **Multi-Tenant Data Isolation:** Queries enforce `filter(Document.user_id == current_user.id)`. Cross-user access returns HTTP 403/404 and writes audit events.
+
+---
+
+## 18. Document Encryption & Security Implementation
+
+- **Fernet Authenticated Encryption:** AES-128 in CBC mode with PKCS7 padding and HMAC-SHA256 authentication.
+- **Key Separation:** `DOCUMENT_ENCRYPTION_KEY` is strictly validated to be distinct from `JWT_SECRET_KEY`.
+- **Database Dump Inspection:** Inspecting raw SQLite database files confirms that document bodies, summaries, agent traces, questions, and answers contain only base64 ciphertext tokens (`gAAAAA...`).
+- **Audit Logging:** Logs user ID, IP address, event type, and timestamp, strictly redacting passwords, tokens, and document text.
+
+---
+
+## 19. API Overview & Important Endpoints
+
+All protected endpoints require an `Authorization: Bearer <token>` header. Every response includes an `X-Request-ID` header.
+
+| Method | Endpoint | Description | Auth Tier | Rate Limit |
 | :--- | :--- | :--- | :---: | :---: |
-| `POST` | `/auth/register` | Register an enterprise user account | Public | 3 / min |
+| `POST` | `/auth/register` | Register new user account | Public | 3 / min |
 | `POST` | `/auth/login` | Authenticate with email/password; returns JWT | Public | 5 / min |
-| `POST` | `/auth/logout` | Revoke active JWT; adds JTI to blacklist | User | — |
-| `GET` | `/auth/me` | Fetch authenticated user profile details | User | — |
-| `POST` | `/upload` | Upload PDF/image (<=10MB); triggers LangGraph agent workflow | User | — |
-| `GET` | `/documents` | List all documents owned by the authenticated user | User | — |
-| `GET` | `/documents/{id}` | Retrieve document metadata, analysis, tables, and charts | User | — |
-| `POST` | `/documents/{id}/qa` | Single-document grounded Q&A with page citations | User | — |
-| `GET` | `/documents/{id}/qa/history` | Retrieve single-document conversation history | User | — |
-| `POST` | `/documents/multi-qa` | Cross-document synthesis Q&A across selected document IDs | User | — |
-| `GET` | `/documents/multi-qa/history` | Retrieve multi-document synthesis conversation history | User | — |
-| `GET` | `/audit-logs` | Retrieve user-scoped audit security events | User | — |
-| `GET` | `/admin/users` | List all platform users and roles | Admin | — |
+| `POST` | `/auth/logout` | Revoke active JWT; blacklists `jti` | User | — |
+| `GET` | `/auth/me` | Fetch authenticated user profile | User | — |
+| `POST` | `/upload` | Upload PDF/image (<=10MB); triggers agent workflow | User | — |
+| `GET` | `/documents` | List all documents owned by user | User | — |
+| `GET` | `/documents/{id}` | Retrieve document metadata, analysis, and tables | User | — |
+| `POST` | `/documents/{id}/qa` | Single-document grounded Q&A with citations | User | — |
+| `GET` | `/documents/{id}/qa/history` | Retrieve single-document Q&A history | User | — |
+| `POST` | `/documents/multi-qa` | Cross-document synthesis Q&A across selected documents | User | — |
+| `GET` | `/documents/multi-qa/history` | Retrieve multi-document synthesis history | User | — |
+| `GET` | `/audit-logs` | Retrieve user security audit events | User | — |
+| `GET` | `/admin/users` | List all registered users (Admin only) | Admin | — |
 | `PUT` | `/admin/users/{id}/role` | Update user role (`user` or `admin`) | Admin | — |
-| `GET` | `/admin/stats` | Platform metrics: user count, documents, Q&A queries | Admin | — |
-| `GET` | `/health` | System health check (API status, database connectivity) | Public | — |
+| `GET` | `/admin/stats` | System metrics: users, docs, queries | Admin | — |
+| `GET` | `/health` | Service and database connectivity health | Public | — |
+| `GET` | `/about` | Service version and project information | Public | — |
 
 ---
 
-## Installation and Setup
+## 20. Repository Structure
 
-### Prerequisites
+```text
+Enterprise Platform/
+├── Dockerfile                             # Production container specification with dynamic $PORT
+├── docker-compose.yml                     # Multi-service Compose definition
+├── requirements.txt                       # Backend Python dependencies
+├── .dockerignore                          # Build exclusion rules (.env, *.db, uploads)
+├── .env.example                           # Safe environment variable configuration template
+├── README.md                              # Master project documentation (Single Source of Truth)
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml                         # Automated GitHub Actions CI/CD workflow
+│
+├── backend/                               # Core Python FastAPI Application
+│   ├── main.py                            # Lifespan, ASGI RequestIDMiddleware, route registry
+│   ├── agents/                            # LangGraph Multi-Agent Architecture
+│   │   ├── agent_workflow.py              # LangGraph state machine & agent functions
+│   │   ├── document_agent.py              # Document agent entrypoint
+│   │   ├── supervisor.py                  # Supervisor evaluation & retry boundary
+│   │   └── verification_agent.py          # Verification & schema checks
+│   ├── api/                               # REST API Endpoints
+│   │   ├── admin.py                       # RBAC administration endpoints
+│   │   ├── auth.py                        # Authentication, registration, logout
+│   │   ├── document.py                    # Document upload, listing, retrieval
+│   │   └── qa.py                          # Single & multi-document Q&A endpoints
+│   ├── core/                              # Security & Configuration Core
+│   │   ├── config.py                      # Dynamic Settings with key validations
+│   │   ├── encryption.py                  # Fernet AES-128-CBC + HMAC-SHA256 helpers
+│   │   ├── rate_limit.py                  # In-memory sliding-window IP rate limiter
+│   │   └── security.py                    # JWT, bcrypt hashing, JTI revocation
+│   ├── database/                          # Persistence & Data Models
+│   │   ├── database.py                    # SQLite/PostgreSQL engine creation
+│   │   ├── init_db.py                     # Non-destructive table initialization
+│   │   ├── migrate_encryption.py          # Field encryption migration utility
+│   │   └── models.py                      # SQLAlchemy models with EncryptedText
+│   ├── schemas/                           # Pydantic v2 Request/Response Schemas
+│   ├── scripts/                           # Administrative CLI scripts (manage_users.py)
+│   ├── services/                          # Business Logic Services
+│   │   ├── llm_provider.py                # Gemini 1.5 Flash client with backoff
+│   │   ├── multimodal_service.py          # Mixed OCR, table parsing, chart detection
+│   │   ├── ocr_service.py                 # PaddleOCR wrapper
+│   │   ├── pdf_service.py                 # PyMuPDF text & layout extraction
+│   │   └── qa_service.py                  # RAG engine & extractive fallback
+│   └── tests/                             # Automated Pytest Test Suites (128 Tests)
+│
+├── frontend/                              # Modern React 19 + Vite User Interface
+│   ├── index.html                         # SPA entry HTML
+│   ├── package.json                       # Dependencies & build scripts
+│   ├── vite.config.js                     # Vite build configuration
+│   ├── vercel.json                        # SPA rewrite rule for Vercel
+│   └── src/
+│       ├── App.jsx                        # Root router & authentication context
+│       ├── App.css                        # Modern UI styling
+│       ├── services/                      # Axios API service (reads VITE_API_URL)
+│       └── views/                         # Views: DashboardView, AskView, etc.
+│
+├── k8s/                                   # Kubernetes Manifests
+│   ├── deployment.yaml                    # Backend Deployment manifest
+│   ├── service.yaml                       # Backend Service manifest
+│   └── secrets.example.yaml               # Secret template with safe placeholders
+│
+└── mlops/                                 # MLOps Experiment Tracking
+    └── tracking.py                        # MLflow run logging utility
+```
 
-- **Python:** 3.11.x
-- **Node.js:** 18.x or 20.x (with npm)
+---
+
+## 21. Local Installation Requirements
+
+- **Operating System:** Windows 10/11, macOS, or Ubuntu 20.04+
+- **Python:** 3.11.x (recommended)
+- **Node.js:** 18.x or 20.x with `npm`
 - **Git**
-- **Docker & Docker Compose** (optional, for containerized multi-service run)
+- **Docker & Docker Compose** (optional, for containerized execution)
 
 ---
 
-### Step-by-Step Local Setup
+## 22. Backend Setup Commands
 
-#### 1. Clone Repository & Setup Virtual Environment
+### Windows PowerShell
 
 ```powershell
-# Clone the repository
-git clone https://github.com/harinis0812/Enterprise-Grade-Multimodal-AI-Document-Intelligence-Platform-using-Agentic-AI.git
-cd "Enterprise-Grade-Multimodal-AI-Document-Intelligence-Platform-using-Agentic-AI"
+# Clone repository
+git clone https://github.com/Adhithya-p-2004/Enterprise-Grade-Multimodal-AI-Document-Intelligence-Platform-Using-Agentic-AI.git
+cd "Enterprise-Grade-Multimodal-AI-Document-Intelligence-Platform-Using-Agentic-AI"
 
-# Create and activate Python 3.11 virtual environment
+# Create and activate Python virtual environment
 python -m venv venv
+.env\Scripts\Activate.ps1
 
-# Windows PowerShell
-.\venv\Scripts\Activate.ps1
+# Install backend dependencies
+pip install -r requirements.txt
 
-# Linux / macOS
-source venv/bin/activate
+# Start backend development server
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-#### 2. Install Backend Dependencies
+### Linux / macOS
 
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-#### 3. Configure Environment Variables
+---
 
-Create `.env` by copying the template file:
+## 23. Frontend Setup Commands
+
+```bash
+# Navigate to frontend folder
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173`.
+
+---
+
+## 24. Environment Variable Configuration
+
+Create `.env` in the project root by copying `.env.example`:
 
 ```bash
 cp .env.example .env
@@ -791,279 +611,236 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Configure your `.env` file:
+Configure `.env` using safe placeholders:
 
 ```env
-# Application Settings
-ENVIRONMENT=development
-LOG_LEVEL=INFO
-
-# Database Connection (SQLite for local dev, PostgreSQL for production)
+# Database Configuration (Retains existing SQLite database)
 DATABASE_URL=sqlite:///./docuai.db
 
-# Cryptographic Keys (Mandatory)
+# MLOps Experiment Tracking
+MLFLOW_TRACKING_URI=mlruns
+
+# Enterprise Security Configuration (Mandatory: minimum 32 characters)
 JWT_SECRET_KEY=your_generated_64_character_hex_secret_here_minimum_32_chars
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+
+# Authenticated Field-Level Encryption Key (Mandatory: 32 url-safe base64 bytes)
 DOCUMENT_ENCRYPTION_KEY=your_generated_32_byte_urlsafe_base64_fernet_key_here==
 
 # Rate Limiting
-LOGIN_RATE_LIMIT=5
-REGISTER_RATE_LIMIT=3
+LOGIN_RATE_LIMIT=5/minute
+REGISTER_RATE_LIMIT=3/minute
 
-# Google Gemini API (Optional: leave blank to use high-precision extractive fallback)
-GEMINI_API_KEY=
+# Generative AI Q&A (Optional: leave blank for high-precision extractive fallback)
+GEMINI_API_KEY=your-gemini-api-key-here
 GEMINI_MODEL=gemini-1.5-flash
 
-# CORS Settings
-CORS_ORIGINS=["http://localhost:5173","http://localhost:3000","http://127.0.0.1:5173"]
+# CORS Whitelist (comma-separated origins)
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000
 ```
 
-#### 4. Install Frontend Dependencies
+---
+
+## 25. Local Testing Instructions
+
+The complete test suite contains **128 tests passing across 13 test modules**.
+
+### Run Full Regression Suite
+
+```powershell
+.env\Scripts\python.exe -m pytest backend/tests/ -v
+```
+
+### Run Scoped CI Test Suite (33 Deterministic Tests)
+
+```powershell
+.env\Scripts\python.exe -m pytest backend/tests/test_agent_workflow.py backend/tests/test_mlflow_tracking.py backend/tests/test_qa_pipeline_remediation.py backend/tests/test_phase6_deployment.py -v
+```
+
+---
+
+## 26. Docker Architecture & Build Instructions
+
+[`Dockerfile`](file:///D:/Enterprise%20Platform/Dockerfile) is based on `python:3.11-slim` and includes required native graphics and threading libraries (`libgl1`, `libglib2.0-0`, `libsm6`, `libxext6`, `libxrender1`, `libgomp1`).
+
+### Dynamic `$PORT` & Signal Handling
+```dockerfile
+CMD ["sh", "-c", "exec uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+```
+Uses `exec` to forward Unix termination signals (`SIGTERM`/`SIGINT`) directly to Uvicorn for graceful zero-downtime restarts.
+
+### Dynamic Health Check
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3     CMD python -c "import os, urllib.request; port = os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=5)" || exit 1
+```
+Automatically reads the runtime `$PORT` assigned by host environments (e.g., 10000 on Render, 8000 on Compose).
+
+### Build & Run Container
 
 ```bash
-cd frontend
-npm install
-cd ..
+docker build -t docuai-backend:v2 .
+docker run -p 8000:8000 --env-file .env docuai-backend:v2
 ```
 
 ---
 
-## Running the Application
+## 27. Docker Compose Instructions
 
-### 1. Local Development Mode
-
-#### Start Backend API Server
-```powershell
-# In project root with venv activated
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
-- Backend API: `http://localhost:8000`
-- Interactive OpenAPI Swagger Docs: `http://localhost:8000/docs`
-- Healthcheck Endpoint: `http://localhost:8000/health`
-
-#### Start Frontend UI Development Server
-```powershell
-# In a separate terminal, navigate to frontend
-cd frontend
-npm run dev
-```
-- Frontend Web Application: `http://localhost:5173`
-
----
-
-### 2. Frontend Production Build
-
-To verify and compile the optimized production bundle:
-
-```powershell
-cd frontend
-npm run build
-```
-
-The production assets compile into `frontend/dist/`:
-- `dist/index.html` (~0.82 kB)
-- `dist/assets/index-*.css` (~56.29 kB)
-- `dist/assets/index-*.js` (~275.36 kB)
-
----
-
-### 3. Containerized Deployment with Docker Compose
-
-To orchestrate the backend API service alongside a PostgreSQL 16 database:
+[`docker-compose.yml`](file:///D:/Enterprise%20Platform/docker-compose.yml) provides multi-service local container orchestration:
 
 ```bash
-# Build and launch all container services
-docker compose up --build
-
-# Run in detached background mode
+# Build and start services in background
 docker compose up -d --build
 
-# View container logs
+# View logs
 docker compose logs -f backend
 
-# Stop containers
+# Stop services
 docker compose down
 ```
 
-Services initialized by Docker Compose:
-- **`postgres` container (`docuai-postgres`):** Accessible at `localhost:5432` with health checks.
-- **`backend` container (`docuai-backend-compose`):** Accessible at `http://localhost:8000` with automated startup health probing.
+---
+
+## 28. GitHub Actions CI/CD Workflow
+
+The automated CI/CD pipeline is defined in [`.github/workflows/ci.yml`](file:///D:/Enterprise%20Platform/.github/workflows/ci.yml).
+
+### Workflow Jobs & Execution Results (Run #43347099967)
+
+| Job Name | Target Runner | Steps Performed | Result |
+| :--- | :--- | :--- | :---: |
+| **Backend Tests** | `ubuntu-latest` | Installs OS libraries (`libgomp1`), runs 33 scoped test suites | **SUCCESS** |
+| **Frontend Build Check** | `ubuntu-latest` | Installs Node.js dependencies, executes `npm run build` | **SUCCESS** |
+| **Docker Build & Verify** | `ubuntu-latest` | Builds container image, executes dynamic container healthcheck | **SUCCESS** |
+| **Continuous Deployment (CD)** | `ubuntu-latest` | Publishes container image to GitHub Container Registry (GHCR) | **SUCCESS** |
 
 ---
 
-## Testing and Verification Results
+## 29. GHCR Container Image Publishing
 
-The platform incorporates comprehensive automated regression test coverage across all architectural layers, with **128 tests passing across 13 test modules in 31.08s (100% pass rate, 0 failures, 0 skips)**.
-
-### Full Regression Test Execution
-
-```powershell
-.\venv\Scripts\python.exe -m pytest backend/tests/ -v
-```
-
-### Complete Test Suite Breakdown
-
-| # | Test Module File | Architectural Domain / Target Capability | Tests | Status |
-| :---: | :--- | :--- | :---: | :---: |
-| 1 | `backend/tests/test_agent_workflow.py` | LangGraph state graph, agent routing, supervisor verification | 11 | **PASSED** |
-| 2 | `backend/tests/test_document.py` | Document upload, file boundaries, MIME validation, intake limits | 9 | **PASSED** |
-| 3 | `backend/tests/test_mlflow_tracking.py` | MLflow tracking setup, document run telemetry logging | 2 | **PASSED** |
-| 4 | `backend/tests/test_phase2_security.py` | Fernet encryption at rest, JWT revocation, rate limiting, RBAC | 15 | **PASSED** |
-| 5 | `backend/tests/test_phase3_qa.py` | Gemini provider, passage scoring, grounded retrieval, citations | 14 | **PASSED** |
-| 6 | `backend/tests/test_phase4_multimodal.py` | PyMuPDF tables, markdown formatting, continuation, visual detector | 13 | **PASSED** |
-| 7 | `backend/tests/test_phase4_remediation.py` | Mixed OCR bounding-box coverage, text deduplication, MIME checks | 17 | **PASSED** |
-| 8 | `backend/tests/test_phase5_agentic.py` | Supervisor retry cap (max 2), intent classification, multi-doc API | 12 | **PASSED** |
-| 9 | `backend/tests/test_phase6_deployment.py` | ASGI `X-Request-ID` middleware, zero-leak logging, `/health` | 5 | **PASSED** |
-| 10 | `backend/tests/test_phase7_integration.py` | Single/multi Q&A end-to-end, cross-user isolation, schema validation | 3 | **PASSED** |
-| 11 | `backend/tests/test_qa.py` | Single-document passage retrieval and citation unit tests | 10 | **PASSED** |
-| 12 | `backend/tests/test_qa_pipeline_remediation.py` | Layout/header filtering, concept overlap scoring, extractive fallback | 13 | **PASSED** |
-| 13 | `backend/tests/test_security.py` | User auth, login, password tampering, multi-tenant isolation | 11 | **PASSED** |
-| **TOTAL** | **13 Test Modules** | **Full Platform End-to-End Regression** | **128** | **128/128 PASSED (100%)** |
-
-### Verified Test Duration
-- Total execution time: **31.08 seconds**
-- Test execution output: `128 passed, 2 warnings in 31.08s`
-- Zero failed, zero skipped, zero hanging processes.
-
-### Master Backup Inventory
-Twelve complete, non-overlapping physical backups are preserved on `D:\`:
-1. `D:\Enterprise_Platform_Backup_Phase1`
-2. `D:\Enterprise_Platform_Backup_Phase2`
-3. `D:\Enterprise_Platform_Backup_Phase3`
-4. `D:\Enterprise_Platform_Backup_Phase4`
-5. `D:\Enterprise_Platform_Backup_Phase4_Final_Remediation`
-6. `D:\Enterprise_Platform_Backup_Master`
-7. `D:\Enterprise_Platform_Backup_Phases5_6_7`
-8. `D:\Enterprise_Platform_Backup_Phase6_Investigation`
-9. `D:\Enterprise_Platform_Backup_Phase7_PreIntegration`
-10. `D:\Enterprise_Platform_Backup_Phase7_UI_Implementation`
-11. `D:\Enterprise_Platform_Backup_QA_Pipeline_Fix`
-12. `D:\Enterprise_Platform_Backup_Consolidate_README`
+During automated GitHub Actions runs, the CD job packages and publishes the production image to GitHub Container Registry:
+- **Registry URL:** `ghcr.io/adhithya-p-2004/docuai-backend:latest`
+- Authenticated via ephemeral `GITHUB_TOKEN`.
+- Can be pulled into container runtimes or Kubernetes clusters.
 
 ---
 
-## Known Limitations
+## 30. Render Backend Deployment
 
-In the interest of full technical transparency, the following architectural and deployment characteristics are documented:
+The live backend is deployed on Render as a containerized web service.
 
-1. **Default Unconfigured Gemini API Key:** In the default development environment, `GEMINI_API_KEY` is not populated. The platform operates out-of-the-box in air-gapped / offline mode using its high-precision extractive retrieval fallback engine (`answer_mode="retrieval_fallback"`). Grounded answers and citations are directly extracted from verified document passages without generative hallucination. To activate generative synthesis, provide a valid Google Gemini API key in `.env`.
-2. **Visual Chart & Diagram Semantic Interpretation:** Without Gemini Multimodal Vision API credentials, visual chart and diagram interpretation relies on bounding-box heuristics, drawing element counts, and extracted axis labels. Deep semantic visual reasoning on charts requires enabling Gemini Vision.
-3. **In-Memory Rate Limiting Scope:** The built-in sliding-window rate limiter maintains state in memory per FastAPI worker process. In horizontally scaled multi-pod production environments behind a load balancer, rate limits should be backed by a centralized Redis cluster to prevent per-instance rate limiter bypass.
-4. **Multi-Document Synthesis Scope Ceiling:** Multi-document Q&A is currently bounded to a maximum of 10 simultaneous documents per query to maintain predictable response latencies.
-5. **Sequential Node Execution:** In the current LangGraph state machine, table extraction and visual element detection execute sequentially rather than concurrently across parallel worker branches.
+- **Live URL:** [https://enterprise-grade-multimodal-ai-document.onrender.com](https://enterprise-grade-multimodal-ai-document.onrender.com)
+- **Dynamic Port:** Render automatically binds the container via the `$PORT` environment variable (port 10000).
+- **Persistent Storage Note:** Render Free web services run with ephemeral disk storage. In free tier operation, the SQLite database (`docuai.db`) will reset if the container is redeployed or put to sleep. For long-term production persistence, attach a Render persistent disk mounted to `/var/data` and configure `DATABASE_URL=sqlite:////var/data/docuai.db`.
 
 ---
 
-## Future Enhancements
+## 31. Vercel Frontend Deployment
 
-The following features represent the forward-looking development roadmap for the platform:
+The live frontend is hosted on Vercel with automatic Git integration.
 
-- **Redis-Backed Distributed Security Cache:** Migrate sliding-window rate limiting and JTI token revocation from in-memory/database storage to Redis for high-throughput distributed clusters.
-- **Dense Vector Embedding Search:** Integrate pgvector with PostgreSQL or an external vector database (e.g., ChromaDB, Milvus) alongside the current lexical TF-IDF + subword retrieval engine.
-- **Gemini 1.5 Pro Multimodal Vision:** Implement direct image-to-text visual reasoning for charts, plots, and complex mechanical schematics using Gemini 1.5 Pro.
-- **Streaming Token Delivery:** Implement Server-Sent Events (SSE) or WebSockets to stream generative answer tokens and real-time LangGraph agent trace steps to the React user interface.
-- **Enterprise RBAC Hierarchy:** Extend user roles to include fine-grained organizational tenants, workspace-level permissions, and an `auditor` role with read-only access to audit logs.
-- **Batch Document Ingestion:** Provide asynchronous background worker queues (via Celery or ARQ) for bulk document uploads and asynchronous processing notifications.
+- **Live URL:** [https://enterprise-grade-multimodal-ai-docu.vercel.app/](https://enterprise-grade-multimodal-ai-docu.vercel.app/)
+- **Build Command:** `npm run build`
+- **Output Directory:** `dist`
+- **Routing:** Supported by [`frontend/vercel.json`](file:///D:/Enterprise%20Platform/frontend/vercel.json) rewrites, routing all paths to `/index.html` for client-side navigation.
 
 ---
 
-## Project Structure
+## 32. Production Frontend-Backend Integration
 
-```text
-Enterprise Platform/
-│
-├── Dockerfile                             # Multi-stage production container specification
-├── docker-compose.yml                     # Multi-service Compose (FastAPI + PostgreSQL 16)
-├── requirements.txt                       # Backend Python dependencies
-├── .env.example                           # Safe environment configuration template
-├── README.md                              # Master project documentation (Single Source of Truth)
-│
-├── backend/                               # Core Python FastAPI Application
-│   ├── main.py                            # FastAPI lifespan, ASGI RequestIDMiddleware, routes
-│   │
-│   ├── agents/                            # LangGraph Multi-Agent Architecture
-│   │   ├── __init__.py
-│   │   └── graph_workflow.py              # 7-agent cyclic state graph, supervisor retry logic
-│   │
-│   ├── api/                               # REST API Endpoints & Routers
-│   │   ├── __init__.py
-│   │   ├── admin.py                       # RBAC admin endpoints (/admin/users, /admin/stats)
-│   │   ├── auth.py                        # Authentication, JWT, JTI revocation, rate limiting
-│   │   ├── document.py                    # Document intake, multimodal upload, ownership check
-│   │   └── qa.py                          # Single-doc Q&A & multi-doc synthesis endpoints
-│   │
-│   ├── core/                              # Security & Infrastructure Core
-│   │   ├── __init__.py
-│   │   ├── config.py                      # App settings & strict cryptographic key validation
-│   │   ├── encryption.py                  # Fernet AES-128-CBC + HMAC-SHA256 helpers
-│   │   ├── rate_limit.py                  # In-memory sliding-window IP bucket rate limiter
-│   │   └── security.py                    # JWT encoding/decoding, RBAC guards, audit events
-│   │
-│   ├── database/                          # Persistence & Data Modeling
-│   │   ├── __init__.py
-│   │   ├── database.py                    # Dynamic engine & PostgreSQL connection pooling
-│   │   ├── init_db.py                     # Non-destructive schema initialization
-│   │   ├── migrate_encryption.py          # Idempotent database encryption migration utility
-│   │   └── models.py                      # SQLAlchemy models (User, Document, QA, MultiDocQA)
-│   │
-│   ├── schemas/                           # Pydantic v2 Request/Response Schemas
-│   │   ├── __init__.py
-│   │   ├── auth.py                        # User registration, login, token, admin schemas
-│   │   ├── document.py                    # Document metadata, upload response schemas
-│   │   └── qa.py                          # Q&A request, multi-doc request, citation schemas
-│   │
-│   ├── scripts/                           # Administrative CLI Utilities
-│   │   ├── __init__.py
-│   │   └── manage_users.py                # User role promotion and administration CLI
-│   │
-│   ├── services/                          # Business Logic & Processing Engines
-│   │   ├── __init__.py
-│   │   ├── llm_provider.py                # Google Gemini API provider with exponential backoff
-│   │   ├── mlflow_service.py              # MLflow telemetry & experiment tracking
-│   │   ├── multimodal_service.py          # Mixed-content OCR, PyMuPDF tables, chart detector
-│   │   ├── pdf_service.py                 # PyMuPDF text, table, and layout extraction
-│   │   └── qa_service.py                  # Intent classifier, synonym expansion, RAG fallback
-│   │
-│   └── tests/                             # Automated Test Suites (128 Tests Passing)
-│       ├── conftest.py                    # Pytest fixtures, test database, mock OCR setup
-│       ├── test_agent_workflow.py         # LangGraph state machine tests (11 tests)
-│       ├── test_document.py               # Document intake & file boundary tests (9 tests)
-│       ├── test_mlflow_tracking.py        # MLflow telemetry logging tests (2 tests)
-│       ├── test_phase2_security.py        # Encryption at rest, JWT revocation, rate limits (15 tests)
-│       ├── test_phase3_qa.py              # Gemini provider, passage scoring, citations (14 tests)
-│       ├── test_phase4_multimodal.py      # PyMuPDF tables, markdown formatting, charts (13 tests)
-│       ├── test_phase4_remediation.py     # OCR coverage, deduplication, MIME tests (17 tests)
-│       ├── test_phase5_agentic.py         # Supervisor retry cap, intent, multi-doc API (12 tests)
-│       ├── test_phase6_deployment.py      # ASGI RequestID middleware, safe latency logs (5 tests)
-│       ├── test_phase7_integration.py     # Single/multi Q&A end-to-end, cross-user isolation (3 tests)
-│       ├── test_qa.py                     # Single-doc retrieval & citation unit tests (10 tests)
-│       ├── test_qa_pipeline_remediation.py# Layout/header filtering, extractive fallback (13 tests)
-│       └── test_security.py               # Auth, password tampering, tenant isolation (11 tests)
-│
-└── frontend/                              # Modern React 19 + Vite User Interface
-    ├── index.html                         # SPA HTML entry point
-    ├── package.json                       # Frontend dependencies and build scripts
-    ├── vite.config.js                     # Vite build configuration
-    ├── public/                            # Static public web assets
-    └── src/
-        ├── App.jsx                        # Main application router and state wrapper
-        ├── App.css                        # Modern CSS styling (tabs, chips, badges, cards)
-        ├── main.jsx                       # React DOM entry point
-        │
-        ├── components/                    # Reusable UI Components
-        │   ├── Header.jsx                 # Navigation bar, auth status, mode indicators
-        │   └── DocumentList.jsx           # Document management table and status indicators
-        │
-        ├── services/                      # Frontend API Integration Layer
-        │   └── api.js                     # Axios API client (auth, docs, single/multi Q&A)
-        │
-        └── views/                         # Primary Application Views
-            ├── DashboardView.jsx          # Document upload, status cards, inspection modal
-            ├── AskView.jsx                # Dual-mode Q&A workspace (Single-Doc vs Multi-Doc)
-            └── LoginView.jsx              # User authentication and registration form
+- **CORS Preflight:** The Render backend allows requests originating from `https://enterprise-grade-multimodal-ai-docu.vercel.app` with credentials enabled.
+- **Compiled Assets:** In the production bundle (`assets/index-*.js`), `API_URL` compiles directly to the live Render endpoint. Zero calls to `localhost` or `127.0.0.1` exist in production builds.
+
+---
+
+## 33. Kubernetes Manifests & Deployment Instructions
+
+Kubernetes manifests are located in `k8s/`:
+
+```bash
+# Apply secrets (use custom values derived from k8s/secrets.example.yaml)
+kubectl apply -f k8s/secrets.example.yaml
+
+# Apply backend deployment and service
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
 ```
 
 ---
 
-## License
+## 34. Kubernetes Deployment Status & Limitations
 
-This project is developed for enterprise demonstration, evaluation, and academic project review. All rights reserved.
+- **Deployment Status:** **MANIFEST VALIDATION ONLY / NOT CLUSTER DEPLOYED**. Manifests have been validated for YAML structure and API schemas, but an actual Kubernetes cluster is not currently deployed.
+- **Storage Requirement for SQLite:** `k8s/deployment.yaml` sets `replicas: 1` (correct for SQLite single-writer safety), but currently lacks a `PersistentVolumeClaim` mount. For Kubernetes deployment with SQLite, a PVC (ReadWriteOnce) must be mounted to the container's data directory.
+- **Rollout Strategy:** Rolling update must be configured with `strategy: type: Recreate` to ensure the old pod releases the SQLite database lock before the new pod mounts it.
+
+---
+
+## 35. Testing & Verification Results
+
+### Test Suite Summary
+
+- **Total Test Suites:** 13 test modules
+- **Total Tests:** 128 tests
+- **Passing Tests:** 128 (100% pass rate)
+- **Failures / Errors:** 0
+- **Execution Time:** ~31 seconds locally; 9.2 seconds for scoped CI suites.
+
+| Module | Focus Area | Tests | Status |
+| :--- | :--- | :---: | :---: |
+| `test_agent_workflow.py` | LangGraph routing, state graph, supervisor | 11 | **PASSED** |
+| `test_document.py` | Intake validation, size/page boundaries | 9 | **PASSED** |
+| `test_mlflow_tracking.py` | MLflow telemetry runs & logging | 2 | **PASSED** |
+| `test_phase2_security.py` | Encryption at rest, JWT revocation, RBAC | 15 | **PASSED** |
+| `test_phase3_qa.py` | Gemini provider, retrieval, citations | 14 | **PASSED** |
+| `test_phase4_multimodal.py` | PyMuPDF tables, markdown formatting, charts | 13 | **PASSED** |
+| `test_phase4_remediation.py` | Mixed OCR coverage & text deduplication | 17 | **PASSED** |
+| `test_phase5_agentic.py` | Supervisor retry cap, multi-doc API | 12 | **PASSED** |
+| `test_phase6_deployment.py` | Request ID middleware, latency logs | 5 | **PASSED** |
+| `test_phase7_integration.py` | Single/multi Q&A end-to-end integration | 3 | **PASSED** |
+| `test_qa.py` | Passage retrieval & citation unit tests | 10 | **PASSED** |
+| `test_qa_pipeline_remediation.py` | Header filtering, extractive fallback | 13 | **PASSED** |
+| `test_security.py` | Authentication, password tampering, isolation | 11 | **PASSED** |
+
+---
+
+## 36. Security Considerations & Audit Findings
+
+A comprehensive security audit confirmed:
+1. **Zero Leaked Secrets:** No active API keys, private keys, or passwords exist in tracked Git files, commit history, Dockerfiles, or frontend bundles.
+2. **Authenticated Field Encryption:** All sensitive database text is encrypted at rest using Fernet AES-128-CBC + HMAC-SHA256.
+3. **Multi-Tenant Isolation:** All document endpoints strictly verify ownership against `current_user.id`, logging unauthorized attempts as security audit events.
+4. **Rate Limiting:** Sliding-window rate limiting on login (5/min) and registration (3/min) mitigates automated credential attacks.
+
+---
+
+## 37. Current Deployment Limitations
+
+1. **Render Free Ephemeral Disk:** Render Free tier resets disk storage on redeployment or idle sleep. SQLite database persistence across redeployments requires a persistent Render disk mount.
+2. **In-Memory Rate Limiting Scope:** The built-in rate limiter operates in memory per worker process. In multi-pod production clusters, a Redis-backed rate limiter is recommended.
+3. **Optional Gemini API Key:** Without a Google Gemini API key, the platform automatically uses its built-in extractive fallback engine. Generative synthesis is activated by adding a valid key to `.env`.
+
+---
+
+## 38. Troubleshooting Guide
+
+- **Port Conflicts:** Ensure port 8000 (backend) and 5173 (frontend) are free before launching local servers.
+- **Cryptographic Key Errors:** Ensure `JWT_SECRET_KEY` is at least 32 characters and `DOCUMENT_ENCRYPTION_KEY` is a valid 32-byte base64 Fernet key distinct from `JWT_SECRET_KEY`.
+- **CORS Issues:** If accessing the backend from a custom frontend origin, add the origin to `CORS_ORIGINS` in `.env`.
+- **Token Expiration:** Default JWT expiration is 15 minutes. Re-authenticate via `POST /auth/login` if receiving HTTP 401.
+
+---
+
+## 39. Future Enhancements Roadmap
+
+- **Distributed Redis Caching:** Centralize rate limiting and token revocation in Redis.
+- **Dense Vector Search:** Integrate pgvector or an external vector database alongside current passage indexing.
+- **Streaming Responses:** Implement Server-Sent Events (SSE) to stream generative tokens and agent traces in real time.
+- **Granular RBAC:** Add departmental roles and read-only auditor access.
+
+---
+
+## 40. Conclusion
+
+The **Enterprise-Grade Multimodal AI Document Intelligence Platform Using Agentic AI** delivers a robust, secure, and verifiable document intelligence solution. By uniting PyMuPDF and PaddleOCR multimodal extraction, a 7-agent LangGraph cyclic state machine, grounded dual-mode RAG with authentic citations, and defense-in-depth cybersecurity controls, the platform bridges the gap between raw document archives and actionable enterprise intelligence.
